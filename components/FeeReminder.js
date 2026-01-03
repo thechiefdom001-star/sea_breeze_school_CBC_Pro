@@ -172,55 +172,55 @@ export const FeeReminder = ({ data }) => {
                 ${filteredStudents.map(student => {
                     const finance = calculateArrears(student);
                     return html`
-                        <div class="bg-white p-4 sm:p-8 rounded-2xl border border-slate-100 shadow-sm print:shadow-none print:border-0 print:p-0 print:mb-0 page-break reminder-card">
+                        <div class="bg-white p-3 sm:p-8 rounded-2xl border border-slate-100 shadow-sm print:shadow-none print:border-0 print:p-0 print:mb-0 page-break reminder-card overflow-hidden">
                             <!-- Header -->
-                            <div class="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4 border-b-2 border-slate-900 pb-4 mb-4 w-full">
+                            <div class="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-2 sm:gap-4 border-b-2 border-slate-900 pb-4 mb-4 w-full">
                                 <div class="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-center sm:text-left">
-                                    <img src="${settings.schoolLogo}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain" />
+                                    <img src="${settings.schoolLogo}" class="w-12 h-12 sm:w-20 sm:h-20 object-contain" />
                                     <div>
-                                        <h1 class="text-xl sm:text-2xl font-black uppercase text-slate-900 leading-tight">${settings.schoolName}</h1>
-                                        <p class="text-[9px] sm:text-[10px] font-bold text-blue-600 uppercase tracking-widest">Excellence in Education</p>
+                                        <h1 class="text-base sm:text-2xl font-black uppercase text-slate-900 leading-tight">${settings.schoolName}</h1>
+                                        <p class="text-[8px] sm:text-[10px] font-bold text-blue-600 uppercase tracking-widest">Excellence in Education</p>
                                     </div>
                                 </div>
-                                <div class="text-center sm:text-right">
+                                <div class="text-center sm:text-right hidden sm:block">
                                     <h1 class="text-base sm:text-lg font-black uppercase text-slate-700">Fee Statement</h1>
                                     <p class="text-[9px] sm:text-[10px] font-bold text-slate-500 leading-tight max-w-[250px] sm:ml-auto">${settings.schoolAddress}</p>
                                 </div>
                             </div>
-                            <div class="flex justify-center mb-6">
-                                <div class="bg-slate-900 text-white px-6 py-1.5 rounded text-[10px] font-black uppercase tracking-widest">
+                            <div class="flex justify-center mb-4 sm:mb-6">
+                                <div class="bg-slate-900 text-white px-4 sm:px-6 py-1 rounded text-[8px] sm:text-[10px] font-black uppercase tracking-widest">
                                     Official Fee Balance Notice ${selectedTerm !== 'ALL' ? `- ${selectedTerm}` : ''}
                                 </div>
                             </div>
 
                             <!-- Student Info -->
-                            <div class="grid grid-cols-2 gap-8 mb-4">
-                                <div class="space-y-1">
-                                    <p class="text-[10px] font-black text-slate-400 uppercase">Attention to Parent/Guardian of:</p>
-                                    <p class="text-xl font-black text-blue-800">${student.name}</p>
-                                    <p class="text-xs font-bold text-slate-600">${student.grade} - ${student.stream || 'No Stream'}</p>
-                                    <p class="text-xs font-mono text-slate-500">Adm No: ${student.admissionNo}</p>
+                            <div class="grid grid-cols-2 gap-4 sm:gap-8 mb-4">
+                                <div class="space-y-0.5 sm:space-y-1">
+                                    <p class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase">Parent/Guardian of:</p>
+                                    <p class="text-sm sm:text-xl font-black text-blue-800">${student.name}</p>
+                                    <p class="text-[10px] sm:text-xs font-bold text-slate-600">${student.grade} - ${student.stream || 'No Stream'}</p>
+                                    <p class="text-[10px] sm:text-xs font-mono text-slate-500">Adm No: ${student.admissionNo}</p>
                                 </div>
-                                <div class="text-right space-y-1">
-                                    <p class="text-[10px] font-black text-slate-400 uppercase">Date of Notice</p>
-                                    <p class="text-sm font-bold">${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                <div class="text-right space-y-0.5 sm:space-y-1">
+                                    <p class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase">Date of Notice</p>
+                                    <p class="text-[10px] sm:text-sm font-bold">${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                                 </div>
                             </div>
 
-                            <p class="text-sm text-slate-700 mb-6">
-                                Dear Parent, this is to kindly remind you of the outstanding school fee balance for the current academic period. 
-                                Below is a detailed breakdown of your account status:
+                            <p class="text-[10px] sm:text-sm text-slate-700 mb-4 sm:mb-6 leading-tight">
+                                Dear Parent, this is to kindly remind you of the outstanding school fee balance. 
+                                Below is a detailed account status breakdown:
                             </p>
 
                             <!-- Breakdown Table -->
-                            <div class="border-2 border-slate-900 rounded-lg overflow-x-auto no-scrollbar mb-6 w-full max-w-full">
-                                <table class="w-full text-sm min-w-[320px] sm:min-w-[500px]">
+                            <div class="border border-slate-900 rounded-lg overflow-x-auto no-scrollbar mb-4 sm:mb-6 w-full max-w-full">
+                                <table class="w-full text-xs sm:text-sm">
                                     <thead class="bg-slate-900 text-white">
                                         <tr>
-                                            <th class="p-2 sm:p-3 text-left uppercase text-[8px] sm:text-[10px] font-black">Description</th>
-                                            <th class="p-2 sm:p-3 text-right uppercase text-[8px] sm:text-[10px] font-black">Due</th>
-                                            <th class="p-2 sm:p-3 text-right uppercase text-[8px] sm:text-[10px] font-black">Paid</th>
-                                            <th class="p-2 sm:p-3 text-right uppercase text-[8px] sm:text-[10px] font-black">Bal</th>
+                                            <th class="p-1.5 sm:p-3 text-left uppercase text-[7px] sm:text-[10px] font-black">Description</th>
+                                            <th class="p-1.5 sm:p-3 text-right uppercase text-[7px] sm:text-[10px] font-black">Due</th>
+                                            <th class="p-1.5 sm:p-3 text-right uppercase text-[7px] sm:text-[10px] font-black">Paid</th>
+                                            <th class="p-1.5 sm:p-3 text-right uppercase text-[7px] sm:text-[10px] font-black">Bal</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-200">
@@ -241,12 +241,12 @@ export const FeeReminder = ({ data }) => {
                                             </tr>
                                         `)}
                                     </tbody>
-                                    <tfoot class="bg-slate-50 border-t-2 border-slate-900">
+                                    <tfoot class="bg-slate-50 border-t border-slate-900">
                                         <tr>
-                                            <td class="p-1.5 sm:p-4 font-black uppercase text-[8px] sm:text-[10px]">TOTAL ARREARS</td>
-                                            <td class="p-1.5 sm:p-4 text-right font-bold text-[9px] sm:text-xs">${finance.totalDue.toLocaleString()}</td>
-                                            <td class="p-1.5 sm:p-4 text-right font-bold text-green-600 text-[9px] sm:text-xs">${finance.totalPaid.toLocaleString()}</td>
-                                            <td class="p-1.5 sm:p-4 text-right font-black text-xs sm:text-xl text-red-600 whitespace-nowrap">
+                                            <td class="p-1.5 sm:p-4 font-black uppercase text-[7px] sm:text-[10px]">TOTAL ARREARS</td>
+                                            <td class="p-1.5 sm:p-4 text-right font-bold text-[8px] sm:text-xs">${finance.totalDue.toLocaleString()}</td>
+                                            <td class="p-1.5 sm:p-4 text-right font-bold text-green-600 text-[8px] sm:text-xs">${finance.totalPaid.toLocaleString()}</td>
+                                            <td class="p-1.5 sm:p-4 text-right font-black text-[10px] sm:text-xl text-red-600 whitespace-nowrap">
                                                 ${settings.currency} ${finance.balance.toLocaleString()}
                                             </td>
                                         </tr>

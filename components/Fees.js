@@ -13,6 +13,7 @@ export const Fees = ({ data, setData }) => {
     const [receipt, setReceipt] = useState(null);
 
     const feeColumns = [
+        { key: 'previousArrears', label: 'Arrears B/F' },
         { key: 'admission', label: 'Admission' },
         { key: 'diary', label: 'Diary' },
         { key: 'development', label: 'Development' },
@@ -94,20 +95,24 @@ export const Fees = ({ data, setData }) => {
 
     const viewReceipt = (p) => {
         const s = data.students.find(st => st.id === p.studentId);
-        const fs = s ? data.settings.feeStructures.find(f => f.grade === s.grade) : null;
+        if (!s) return;
+        
+        const financials = Storage.getStudentFinancials(s, data.payments, data.settings);
+        const fs = data.settings.feeStructures.find(f => f.grade === s.grade);
         
         const studentPayments = (data.payments || []).filter(pay => pay.studentId === s.id);
         const paymentIndex = studentPayments.findIndex(pay => pay.id === p.id);
         const historyUpToNow = studentPayments.slice(0, paymentIndex + 1);
         
-        const totalDue = (Number(s?.previousArrears) || 0) + feeColumns.reduce((sum, col) => sum + (fs?.[col.key] || 0), 0);
+        // Use cumulative balance logic
         const paidUntilNow = historyUpToNow.reduce((sum, pay) => sum + pay.amount, 0);
+        const currentBalance = financials.totalDue - paidUntilNow;
 
         setReceipt({
             ...p,
-            studentName: s?.name || 'Unknown',
-            grade: s?.grade || 'N/A',
-            balance: totalDue - paidUntilNow,
+            studentName: s.name,
+            grade: s.grade,
+            balance: currentBalance,
             structure: fs,
             history: historyUpToNow
         });
@@ -166,6 +171,42 @@ export const Fees = ({ data, setData }) => {
                                 <label class="text-xs font-bold text-slate-500 uppercase block">Fee Breakdown (${data.settings.currency})</label>
                                 <div class="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-2 no-scrollbar">
                                     ${feeColumns.map(col => {
+                                        // Handle Arrears specially
+                                        if (col.key === 'previousArrears') {
+                                            const arrearsDue = Number(student.previousArrears) || 0;
+                                            // Calculate actual outstanding arrears (Arrears BF - what's already been paid towards it)
+                                            const paidArrears = (data.payments || [])
+                                                .filter(p => p.studentId === student.id)
+                                                .reduce((sum, p) => sum + (Number(p.items?.previousArrears) || 0), 0);
+                                            const outstandingArrears = Math.max(0, arrearsDue - paidArrears);
+
+                                            if (outstandingArrears === 0 && arrearsDue === 0) return null;
+                                            
+                                            return html`
+                                                <div class="p-3 bg-orange-50 rounded-xl border-2 border-orange-200 col-span-2 animate-pulse-subtle">
+                                                    <div class="flex justify-between items-center mb-1">
+                                                        <p class="text-[10px] font-black text-orange-600 uppercase truncate">${col.label}</p>
+                                                        <button 
+                                                            type="button"
+                                                            onClick=${() => handleItemInput(col.key, outstandingArrears)}
+                                                            class="text-[9px] bg-orange-600 text-white px-2 py-0.5 rounded font-bold hover:bg-orange-700 transition-colors"
+                                                        >
+                                                            Pay Full Arrears
+                                                        </button>
+                                                    </div>
+                                                    <p class="text-[10px] text-orange-500 mb-1 font-bold">Outstanding Arrears: ${data.settings.currency} ${outstandingArrears.toLocaleString()}</p>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="Enter amount to pay towards arrears..."
+                                                        class="w-full bg-white border border-orange-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 font-black text-orange-700"
+                                                        value=${paymentItems[col.key] || ''}
+                                                        onInput=${(e) => handleItemInput(col.key, e.target.value)}
+                                                    />
+                                                    <p class="text-[8px] text-orange-400 mt-1 italic">* It is recommended to clear arrears before current fees.</p>
+                                                </div>
+                                            `;
+                                        }
+
                                         // Term Filter logic: 
                                         // 1. Hide other terms tuition
                                         if (col.key === 't1' && selectedTerm !== 'T1') return null;
@@ -181,7 +222,7 @@ export const Fees = ({ data, setData }) => {
                                         return html`
                                             <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
                                                 <p class="text-[10px] font-bold text-slate-400 uppercase truncate">${col.label}</p>
-                                                <p class="text-[10px] text-slate-500 mb-1">Due: ${due}</p>
+                                                <p class="text-[10px] text-slate-500 mb-1">Due: ${due.toLocaleString()}</p>
                                                 <input 
                                                     type="number" 
                                                     placeholder="0"
@@ -206,14 +247,14 @@ export const Fees = ({ data, setData }) => {
                     </form>
                 </div>
 
-                <div class="bg-slate-900 text-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl shadow-2xl relative overflow-hidden print:bg-white print:text-black print:shadow-none print:p-0 min-h-[500px]">
+                <div class="bg-slate-900 text-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl shadow-2xl relative overflow-hidden print:bg-white print:text-black print:shadow-none print:p-0 min-h-[500px] receipt-container">
                     <div class="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl print:hidden"></div>
                     ${receipt ? html`
-                        <div class="relative space-y-6 print:space-y-4">
+                        <div class="relative space-y-6 print:space-y-4 print:w-full">
                             <div class="flex flex-col items-center text-center border-b border-slate-800 print:border-black pb-4">
-                                <img src="${data.settings.schoolLogo}" class="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" alt="Logo" />
-                                <h3 class="text-lg sm:text-xl font-black uppercase tracking-tight">${data.settings.schoolName}</h3>
-                                <p class="text-[9px] sm:text-[10px] text-slate-400 print:text-slate-600">${data.settings.schoolAddress}</p>
+                                <img src="${data.settings.schoolLogo}" class="w-12 h-12 sm:w-16 sm:h-16 mb-2 object-contain" alt="Logo" />
+                                <h3 class="text-lg sm:text-2xl font-black uppercase tracking-tight">${data.settings.schoolName}</h3>
+                                <p class="text-[9px] sm:text-sm text-slate-400 print:text-slate-600">${data.settings.schoolAddress}</p>
                             </div>
                             
                             <div class="flex flex-col sm:flex-row justify-between items-start gap-4">
@@ -240,17 +281,32 @@ export const Fees = ({ data, setData }) => {
                                         <span class="text-right">Balance</span>
                                     </div>
                                     <div class="space-y-1 min-w-[280px]">
-                                        ${student?.previousArrears > 0 && html`
-                                            <div class="grid grid-cols-4 text-[9px] sm:text-[10px] border-b border-slate-800/30 print:border-slate-100 py-1.5 items-center">
-                                                <span class="text-slate-400 print:text-slate-500 truncate pr-1">Arrears B/F</span>
-                                                <span class="text-right text-slate-300 print:text-slate-400 font-medium">${student.previousArrears.toLocaleString()}</span>
-                                                <span class="text-right text-slate-600 print:text-slate-300">-</span>
-                                                <span class="text-right font-mono font-bold text-orange-400 print:text-slate-700">${student.previousArrears.toLocaleString()}</span>
-                                            </div>
-                                        `}
                                         ${feeColumns.map(col => {
                                             const paidNow = receipt.items?.[col.key] || 0;
                                             
+                                            // Special logic for Arrears B/F
+                                            if (col.key === 'previousArrears') {
+                                                const targetStudent = data.students.find(s => s.name === receipt.studentName);
+                                                const feeAmount = Number(targetStudent?.previousArrears) || 0;
+                                                if (feeAmount === 0 && paidNow === 0) return null;
+                                                
+                                                const totalPaidForItem = (receipt.history || []).reduce((sum, p) => sum + (p.items?.[col.key] || 0), 0);
+                                                const itemBalance = feeAmount - totalPaidForItem;
+                                                
+                                                return html`
+                                                    <div class="grid grid-cols-4 text-[10px] border-b border-slate-800/30 print:border-slate-100 py-1.5 items-center">
+                                                        <span class="text-orange-400 print:text-orange-600 truncate pr-1 font-bold">${col.label}</span>
+                                                        <span class="text-right text-slate-300 print:text-slate-400 font-medium">${feeAmount.toLocaleString()}</span>
+                                                        <span class=${`text-right font-bold ${paidNow > 0 ? 'text-white print:text-black' : 'text-slate-600 print:text-slate-300'}`}>
+                                                            ${paidNow > 0 ? paidNow.toLocaleString() : '-'}
+                                                        </span>
+                                                        <span class="text-right font-mono font-bold ${itemBalance > 0 ? 'text-orange-400 print:text-slate-700' : 'text-green-400 print:text-green-600'}">
+                                                            ${itemBalance.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                `;
+                                            }
+
                                             // Filter by term if it's a tuition fee
                                             const currentTermKey = receipt.term?.toLowerCase() || '';
                                             const isOtherTerm = ['t1', 't2', 't3'].includes(col.key) && col.key !== currentTermKey;
@@ -293,17 +349,9 @@ export const Fees = ({ data, setData }) => {
                                 </div>
                                 
                                 <div class="space-y-1 px-2 pt-2">
-                                    <div class="flex justify-between">
-                                        <span class="text-slate-400 print:text-slate-500 text-[10px] font-bold uppercase">Term ${receipt.term} Outstanding Balance</span>
-                                        <span class="font-black text-xs text-orange-400 print:text-slate-800">${data.settings.currency} ${
-                                            // Calculate term-specific balance: (Term Tuition Item Due) - (Total Paid for this specific term)
-                                            // Note: receipt.balance is already cumulative but user wants term focus
-                                            receipt.balance.toLocaleString()
-                                        }</span>
-                                    </div>
                                     <div class="flex justify-between border-t border-slate-800/50 print:border-slate-200 pt-1">
-                                        <span class="text-slate-500 print:text-slate-400 text-[8px] font-bold uppercase">Overall Account Balance</span>
-                                        <span class="font-bold text-[10px] text-slate-400 print:text-slate-500">${data.settings.currency} ${receipt.balance.toLocaleString()}</span>
+                                        <span class="text-slate-500 print:text-slate-400 text-[9px] font-black uppercase tracking-wider">Overall Account Balance</span>
+                                        <span class="font-black text-[12px] text-orange-400 print:text-black">${data.settings.currency} ${receipt.balance.toLocaleString()}</span>
                                     </div>
                                 </div>
                             </div>
@@ -354,8 +402,8 @@ export const Fees = ({ data, setData }) => {
                         <span class="text-xs text-slate-400">${(data.payments || []).length} Total</span>
                     </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left">
+                <div class="overflow-x-auto no-scrollbar">
+                    <table class="w-full text-left min-w-[500px]">
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase text-slate-500">
                             <tr>
                                 <th class="px-6 py-3">Receipt #</th>
@@ -406,6 +454,33 @@ export const Fees = ({ data, setData }) => {
                     <div class="p-12 text-center text-slate-300">No transactions recorded yet.</div>
                 `}
             </div>
+            <style>
+                @media print {
+                    .no-print { display: none !important; }
+                    .bg-slate-900 { background-color: white !important; color: black !important; }
+                    .text-white { color: black !important; }
+                    .text-blue-400 { color: #2563eb !important; }
+                    .text-green-400 { color: #166534 !important; }
+                    .text-orange-400 { color: #9a3412 !important; }
+                    .border-slate-800 { border-color: #000 !important; }
+                    
+                    /* Reset mobile constraints for printing */
+                    body, html { height: auto !important; overflow: visible !important; }
+                    #app { height: auto !important; overflow: visible !important; }
+                    main { overflow: visible !important; position: static !important; }
+                    .receipt-container { 
+                        position: absolute !important;
+                        top: 0 !important;
+                        left: 0 !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        z-index: 9999 !important;
+                    }
+                    .bg-slate-900.print\:bg-white { background: white !important; }
+                }
+            </style>
         </div>
     `;
 };
