@@ -77,7 +77,7 @@ export const Sidebar = ({ currentView, setView, isCollapsed, setCollapsed, isMob
     `;
 
     return html`
-        <aside class=${`flex flex-col bg-slate-950 text-white h-full overflow-hidden shrink-0 transition-all duration-300 no-print z-[101] shadow-2xl ${
+        <aside class=${`flex flex-col bg-slate-950 text-white h-full overflow-hidden shrink-0 transition-all duration-300 no-print z-[50] shadow-2xl ${
             isMini ? 'w-16 md:w-20' : 'w-0 md:w-64'
         } ${isMobileOpen ? 'w-64' : ''}`}>
             

@@ -5,6 +5,10 @@ import htm from 'htm';
 const html = htm.bind(h);
 
 export const Settings = ({ data, setData }) => {
+    if (!data || !data.settings) {
+        return html`<div class="p-12 text-center text-slate-400 font-bold">Initializing Settings...</div>`;
+    }
+
     const [updating, setUpdating] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [pendingImportData, setPendingImportData] = useState(null);
@@ -17,13 +21,15 @@ export const Settings = ({ data, setData }) => {
         modules: true
     });
     
+    const settings = data.settings;
+
     const updateFee = (grade, field, val) => {
-        const newStructures = data.settings.feeStructures.map(f => 
+        const newStructures = (settings.feeStructures || []).map(f => 
             f.grade === grade ? { ...f, [field]: Number(val) } : f
         );
         setData({
             ...data,
-            settings: { ...data.settings, feeStructures: newStructures }
+            settings: { ...settings, feeStructures: newStructures }
         });
     };
 
@@ -40,7 +46,7 @@ export const Settings = ({ data, setData }) => {
             const url = await window.websim.upload(file);
             setData({
                 ...data, 
-                settings: { ...data.settings, [field]: url }
+                settings: { ...settings, [field]: url }
             });
         } catch (error) {
             console.error('Upload failed:', error);
@@ -121,7 +127,7 @@ export const Settings = ({ data, setData }) => {
             newData.settings = { 
                 ...pendingImportData.settings,
                 // Keep logo if not provided in import
-                schoolLogo: pendingImportData.settings?.schoolLogo || data.settings.schoolLogo
+                schoolLogo: pendingImportData.settings?.schoolLogo || settings.schoolLogo
             };
         }
         if (importSelections.modules) {
@@ -153,8 +159,8 @@ export const Settings = ({ data, setData }) => {
                             <label class="text-xs font-bold text-slate-500 uppercase">System Theme</label>
                             <select 
                                 class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
-                                value=${data.settings.theme || 'light'}
-                                onChange=${(e) => setData({...data, settings: {...data.settings, theme: e.target.value}})}
+                                value=${settings.theme || 'light'}
+                                onChange=${(e) => setData({...data, settings: {...settings, theme: e.target.value}})}
                             >
                                 <option value="light">☀️ Light Mode</option>
                                 <option value="dark">🌙 Dark Mode</option>
@@ -166,13 +172,13 @@ export const Settings = ({ data, setData }) => {
                                 <input 
                                     type="color"
                                     class="w-12 h-12 p-1 rounded-xl cursor-pointer bg-slate-50 border border-slate-100"
-                                    value=${data.settings.primaryColor || '#2563eb'}
-                                    onInput=${(e) => setData({...data, settings: {...data.settings, primaryColor: e.target.value}})}
+                                    value=${settings.primaryColor || '#2563eb'}
+                                    onInput=${(e) => setData({...data, settings: {...settings, primaryColor: e.target.value}})}
                                 />
                                 <input 
                                     class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-xs font-mono"
-                                    value=${data.settings.primaryColor}
-                                    onInput=${(e) => setData({...data, settings: {...data.settings, primaryColor: e.target.value}})}
+                                    value=${settings.primaryColor}
+                                    onInput=${(e) => setData({...data, settings: {...settings, primaryColor: e.target.value}})}
                                 />
                             </div>
                         </div>
@@ -182,13 +188,13 @@ export const Settings = ({ data, setData }) => {
                                 <input 
                                     type="color"
                                     class="w-12 h-12 p-1 rounded-xl cursor-pointer bg-slate-50 border border-slate-100"
-                                    value=${data.settings.secondaryColor || '#64748b'}
-                                    onInput=${(e) => setData({...data, settings: {...data.settings, secondaryColor: e.target.value}})}
+                                    value=${settings.secondaryColor || '#64748b'}
+                                    onInput=${(e) => setData({...data, settings: {...settings, secondaryColor: e.target.value}})}
                                 />
                                 <input 
                                     class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-xs font-mono"
-                                    value=${data.settings.secondaryColor}
-                                    onInput=${(e) => setData({...data, settings: {...data.settings, secondaryColor: e.target.value}})}
+                                    value=${settings.secondaryColor}
+                                    onInput=${(e) => setData({...data, settings: {...settings, secondaryColor: e.target.value}})}
                                 />
                             </div>
                         </div>
@@ -255,7 +261,7 @@ export const Settings = ({ data, setData }) => {
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <h3 class="font-bold mb-6">Fee Structure per Grade (${data.settings.currency})</h3>
+                    <h3 class="font-bold mb-6">Fee Structure per Grade (${settings.currency})</h3>
                     <div class="overflow-x-auto no-scrollbar">
                         <table class="w-full text-[10px] text-left border-collapse">
                             <thead class="bg-slate-50 text-slate-500 uppercase font-bold sticky top-0">
@@ -265,7 +271,7 @@ export const Settings = ({ data, setData }) => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                ${data.settings.feeStructures.map(fee => html`
+                                ${(settings.feeStructures || []).map(fee => html`
                                     <tr key=${fee.grade}>
                                         <td class="p-2 font-bold text-slate-700 border bg-white">${fee.grade}</td>
                                         ${feeColumns.map(col => html`
@@ -331,7 +337,7 @@ export const Settings = ({ data, setData }) => {
                     <div class="space-y-6">
                         <div class="flex flex-col md:flex-row gap-6 items-center border-b pb-6">
                             <label class="relative w-24 h-24 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer group">
-                                <img src="${data.settings.schoolLogo}" class="w-full h-full object-contain" />
+                                <img src="${settings.schoolLogo}" class="w-full h-full object-contain" />
                                 <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <span class="text-[10px] text-white font-bold text-center">Upload Logo</span>
                                 </div>
@@ -343,8 +349,8 @@ export const Settings = ({ data, setData }) => {
                                     <div class="flex gap-2">
                                         <input 
                                             class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400 text-xs"
-                                            value=${data.settings.schoolLogo}
-                                            onInput=${(e) => setData({...data, settings: {...data.settings, schoolLogo: e.target.value}})}
+                                            value=${settings.schoolLogo}
+                                            onInput=${(e) => setData({...data, settings: {...settings, schoolLogo: e.target.value}})}
                                             placeholder="Paste logo URL or upload"
                                         />
                                     </div>
@@ -358,7 +364,7 @@ export const Settings = ({ data, setData }) => {
                                 <label class="text-xs font-bold text-slate-500 uppercase block">Principal's Signature</label>
                                 <div class="flex items-center gap-4">
                                     <label class="w-24 h-12 bg-slate-50 rounded-xl border border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer group shrink-0">
-                                        <img src="${data.settings.principalSignature}" class="w-full h-full object-contain" />
+                                        <img src="${settings.principalSignature}" class="w-full h-full object-contain" />
                                         <div class="absolute w-24 h-12 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                             <span class="text-[8px] text-white font-bold">Upload</span>
                                         </div>
@@ -366,8 +372,8 @@ export const Settings = ({ data, setData }) => {
                                     </label>
                                     <input 
                                         class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-[10px]"
-                                        value=${data.settings.principalSignature}
-                                        onInput=${(e) => setData({...data, settings: {...data.settings, principalSignature: e.target.value}})}
+                                        value=${settings.principalSignature}
+                                        onInput=${(e) => setData({...data, settings: {...settings, principalSignature: e.target.value}})}
                                         placeholder="Signature Image URL"
                                     />
                                 </div>
@@ -376,7 +382,7 @@ export const Settings = ({ data, setData }) => {
                                 <label class="text-xs font-bold text-slate-500 uppercase block">Accounts Clerk's Signature</label>
                                 <div class="flex items-center gap-4">
                                     <label class="w-24 h-12 bg-slate-50 rounded-xl border border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer group shrink-0">
-                                        <img src="${data.settings.clerkSignature}" class="w-full h-full object-contain" />
+                                        <img src="${settings.clerkSignature}" class="w-full h-full object-contain" />
                                         <div class="absolute w-24 h-12 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                             <span class="text-[8px] text-white font-bold">Upload</span>
                                         </div>
@@ -384,8 +390,8 @@ export const Settings = ({ data, setData }) => {
                                     </label>
                                     <input 
                                         class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-[10px]"
-                                        value=${data.settings.clerkSignature}
-                                        onInput=${(e) => setData({...data, settings: {...data.settings, clerkSignature: e.target.value}})}
+                                        value=${settings.clerkSignature}
+                                        onInput=${(e) => setData({...data, settings: {...settings, clerkSignature: e.target.value}})}
                                         placeholder="Signature Image URL"
                                     />
                                 </div>
@@ -397,16 +403,16 @@ export const Settings = ({ data, setData }) => {
                                 <label class="text-xs font-bold text-slate-500 uppercase">School Name</label>
                                 <input 
                                     class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
-                                    value=${data.settings.schoolName}
-                                    onInput=${(e) => setData({...data, settings: {...data.settings, schoolName: e.target.value}})}
+                                    value=${settings.schoolName}
+                                    onInput=${(e) => setData({...data, settings: {...settings, schoolName: e.target.value}})}
                                 />
                             </div>
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-slate-500 uppercase">School Address</label>
                                 <input 
                                     class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
-                                    value=${data.settings.schoolAddress}
-                                    onInput=${(e) => setData({...data, settings: {...data.settings, schoolAddress: e.target.value}})}
+                                    value=${settings.schoolAddress}
+                                    onInput=${(e) => setData({...data, settings: {...settings, schoolAddress: e.target.value}})}
                                 />
                             </div>
                         </div>
@@ -414,8 +420,8 @@ export const Settings = ({ data, setData }) => {
                             <label class="text-xs font-bold text-slate-500 uppercase">Academic Year</label>
                             <select 
                                 class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400 font-bold"
-                                value=${data.settings.academicYear || '2024/2025'}
-                                onChange=${(e) => setData({...data, settings: {...data.settings, academicYear: e.target.value}})}
+                                value=${settings.academicYear || '2024/2025'}
+                                onChange=${(e) => setData({...data, settings: {...settings, academicYear: e.target.value}})}
                             >
                                 ${Array.from({ length: 27 }, (_, i) => 2024 + i).map(year => html`
                                     <option value="${year}/${year + 1}">${year}/${year + 1}</option>

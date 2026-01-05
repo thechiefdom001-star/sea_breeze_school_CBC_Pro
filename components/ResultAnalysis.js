@@ -85,6 +85,13 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                     <p class="text-slate-500 text-sm">Aggregated performance across triple-exam cycles</p>
                 </div>
                 <div class="flex gap-2 w-full md:w-auto">
+                    <button 
+                        onClick=${() => onSelectStudent(analysisData[0]?.id, true)} 
+                        class="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-colors"
+                        disabled=${analysisData.length === 0}
+                    >
+                        Print All Report Forms
+                    </button>
                     <button onClick=${() => window.print()} class="flex-1 md:flex-none bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm">Print Analysis</button>
                 </div>
             </div>
@@ -187,7 +194,7 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                                 </td>
                                 <td class="px-4 py-3 text-center bg-slate-50/50 no-print">
                                     <button 
-                                        onClick=${() => onSelectStudent(student.id)}
+                                        onClick=${() => onSelectStudent(student.id, false)}
                                         class="bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase hover:border-primary hover:text-primary transition-all"
                                     >
                                         Detailed Report

@@ -15,7 +15,9 @@ export const Teachers = ({ data, setData }) => {
         employeeNo: '',
         nssfNo: '',
         shifNo: '',
-        taxNo: ''
+        taxNo: '',
+        isClassTeacher: false,
+        classTeacherGrade: ''
     });
 
     const handleAdd = (e) => {
@@ -41,7 +43,9 @@ export const Teachers = ({ data, setData }) => {
             employeeNo: '',
             nssfNo: '',
             shifNo: '',
-            taxNo: ''
+            taxNo: '',
+            isClassTeacher: false,
+            classTeacherGrade: ''
         });
         setEditingId(null);
     };
@@ -135,6 +139,32 @@ export const Teachers = ({ data, setData }) => {
                             <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Tax (PIN) No.</label>
                             <input placeholder="e.g. A00..." class="w-full p-3 bg-slate-50 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value=${newTeacher.taxNo} onInput=${(e) => setNewTeacher({...newTeacher, taxNo: e.target.value})} />
                         </div>
+                        <div class="space-y-1 md:col-span-2 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-center gap-6">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    class="w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                                    checked=${newTeacher.isClassTeacher}
+                                    onChange=${(e) => setNewTeacher({...newTeacher, isClassTeacher: e.target.checked})}
+                                />
+                                <span class="text-xs font-black text-blue-800 uppercase">Is Class Teacher?</span>
+                            </label>
+                            
+                            ${newTeacher.isClassTeacher && html`
+                                <div class="flex-1 flex items-center gap-2 animate-in slide-in-from-left-2">
+                                    <span class="text-[10px] font-bold text-blue-600 uppercase">For Class:</span>
+                                    <select 
+                                        class="flex-1 p-2 bg-white border border-blue-200 rounded-lg text-xs font-bold outline-none"
+                                        value=${newTeacher.classTeacherGrade}
+                                        onChange=${(e) => setNewTeacher({...newTeacher, classTeacherGrade: e.target.value})}
+                                        required
+                                    >
+                                        <option value="">Select Grade...</option>
+                                        ${data.settings.grades.map(g => html`<option value=${g}>${g}</option>`)}
+                                    </select>
+                                </div>
+                            `}
+                        </div>
                     </div>
                     <button class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-colors">
                         ${editingId ? 'Update Teacher Profile' : 'Register Teacher'}
@@ -160,6 +190,11 @@ export const Teachers = ({ data, setData }) => {
                                 <tr key=${t.id} class="hover:bg-slate-100 transition-colors even:bg-slate-50">
                                     <td class="px-6 py-4">
                                         <div class="font-bold text-sm">${t.name}</div>
+                                        ${t.isClassTeacher && html`
+                                            <div class="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full inline-block font-black uppercase mt-1">
+                                                Class Teacher: ${t.classTeacherGrade}
+                                            </div>
+                                        `}
                                     </td>
                                     <td class="px-6 py-4">
                                         <div class="text-xs font-mono text-slate-600">${t.employeeNo || t.id}</div>

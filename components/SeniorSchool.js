@@ -222,11 +222,11 @@ export const SeniorSchool = ({ data, setData }) => {
                 <p class="text-[10px] text-slate-400 mt-1">Grade: ${filterGrade} | Generated: ${new Date().toLocaleDateString()}</p>
             </div>
 
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <table class="w-full text-left">
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
+                <table class="w-full text-left min-w-[700px]">
                     <thead class="bg-slate-50 border-b text-[10px] font-bold text-slate-500 uppercase">
                         <tr>
-                            <th class="px-6 py-4">Student</th>
+                            <th class="px-6 py-4 sticky left-0 bg-slate-50 z-10">Student</th>
                             <th class="px-6 py-4">Grade</th>
                             <th class="px-6 py-4">Pathway</th>
                             <th class="px-6 py-4">Electives</th>
@@ -236,7 +236,7 @@ export const SeniorSchool = ({ data, setData }) => {
                     <tbody class="divide-y divide-slate-50">
                         ${filteredStudents.map(s => html`
                             <tr key=${s.id} class="hover:bg-slate-50 transition-colors">
-                                <td class="px-6 py-4">
+                                <td class="px-6 py-4 sticky left-0 bg-white group-hover:bg-slate-50 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                                     <div class="font-bold text-sm">${s.name}</div>
                                     <div class="text-[9px] text-slate-400 uppercase font-mono">${s.admissionNo}</div>
                                 </td>
@@ -262,8 +262,8 @@ export const SeniorSchool = ({ data, setData }) => {
                                 </td>
                                 <td class="px-6 py-4 text-center no-print">
                                     <button 
-                                        onClick=${() => handleEdit(s.id)}
-                                        class="bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase hover:border-primary hover:text-primary transition-all"
+                                        onPointerDown=${(e) => { e.preventDefault(); handleEdit(s.id); }}
+                                        class="bg-white border border-slate-200 text-slate-600 px-4 py-3 sm:px-3 sm:py-1.5 rounded-lg text-[10px] font-black uppercase hover:border-primary hover:text-primary active:scale-95 transition-all touch-manipulation relative z-10"
                                     >
                                         ${s.grade === 'GRADE 10' ? 'Allocate Subjects' : 'Modify Choice'}
                                     </button>
