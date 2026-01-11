@@ -6,6 +6,7 @@ const html = htm.bind(h);
 
 export const Timetable = ({ data, setData }) => {
     const [viewType, setViewType] = useState('class'); // 'class', 'teacher', 'master'
+    const [selectedGroup, setSelectedGroup] = useState('primary');
     const [selectedFilter, setSelectedFilter] = useState('');
     const [showAddEntry, setShowAddEntry] = useState(false);
     const [newEntry, setNewEntry] = useState({
@@ -17,6 +18,13 @@ export const Timetable = ({ data, setData }) => {
     });
 
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const groups = [
+        { id: 'pp', label: 'PP1 - PP2', grades: ['PP1', 'PP2'] },
+        { id: 'primary', label: 'Grade 1 - 6', grades: ['GRADE 1', 'GRADE 2', 'GRADE 3', 'GRADE 4', 'GRADE 5', 'GRADE 6'] },
+        { id: 'junior', label: 'Grade 7 - 9', grades: ['GRADE 7', 'GRADE 8', 'GRADE 9'] },
+        { id: 'senior', label: 'Grade 10 - 12', grades: ['GRADE 10', 'GRADE 11', 'GRADE 12'] }
+    ];
+
     const defaultSlots = [
         { id: '1', label: '08:00 - 08:40', type: 'lesson' },
         { id: '2', label: '08:40 - 09:20', type: 'lesson' },
@@ -50,11 +58,12 @@ export const Timetable = ({ data, setData }) => {
         }
     };
 
-    const getEntry = (day, slotId, filterVal) => {
+    const getEntry = (day, slotId, filterVal, gradeOverride = null) => {
         return timetables.find(t => {
             const matchesDay = t.day === day && t.period === slotId;
             if (!matchesDay) return false;
             
+            if (viewType === 'master' && gradeOverride) return t.grade === gradeOverride;
             if (viewType === 'class') return t.grade === filterVal;
             if (viewType === 'teacher') return t.teacherId === filterVal;
             return true;
@@ -65,10 +74,10 @@ export const Timetable = ({ data, setData }) => {
         setData({ ...data, settings: { ...data.settings, timetableSlots: newSlots } });
     };
 
-    const renderCell = (day, slot) => {
+    const renderCell = (day, slot, gradeOverride = null) => {
         if (slot.type === 'break') return html`<div class="bg-slate-50 flex items-center justify-center text-[8px] font-black text-slate-300 uppercase tracking-tighter border-b border-r italic px-1 text-center">Break: ${slot.label}</div>`;
         
-        const entry = getEntry(day, slot.id, selectedFilter);
+        const entry = getEntry(day, slot.id, selectedFilter, gradeOverride);
         const teacher = teachers.find(t => t.id === entry?.teacherId);
 
         return html`
@@ -77,10 +86,12 @@ export const Timetable = ({ data, setData }) => {
                     <div class="space-y-1">
                         <p class="text-[10px] font-black text-blue-600 truncate uppercase">${entry.subject}</p>
                         ${viewType === 'teacher' ? html`
-                            <p class="text-[8px] font-bold text-slate-400">${entry.grade}</p>
+                            <p class="text-[9px] font-black text-slate-900 bg-slate-100 px-1 rounded inline-block mt-1">${entry.grade}</p>
+                        ` : (viewType === 'master' ? html`
+                            <p class="text-[7px] font-bold text-slate-400 truncate">${teacher?.name || 'No Teacher'}</p>
                         ` : html`
                             <p class="text-[8px] font-bold text-slate-400">${teacher?.name || 'No Teacher'}</p>
-                        `}
+                        `)}
                         <button 
                             onClick=${() => deleteEntry(entry.id)}
                             class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-[10px] no-print"
@@ -89,7 +100,13 @@ export const Timetable = ({ data, setData }) => {
                 ` : html`
                     <button 
                         onClick=${() => {
-                            setNewEntry({ ...newEntry, day, period, grade: viewType === 'class' ? selectedFilter : '', teacherId: viewType === 'teacher' ? selectedFilter : '' });
+                            setNewEntry({ 
+                                ...newEntry, 
+                                day, 
+                                period: slot.id, 
+                                grade: gradeOverride || (viewType === 'class' ? selectedFilter : ''), 
+                                teacherId: viewType === 'teacher' ? selectedFilter : '' 
+                            });
                             setShowAddEntry(true);
                         }}
                         class="w-full h-full flex items-center justify-center opacity-0 group-hover:opacity-100 text-slate-300 no-print"
@@ -181,7 +198,7 @@ export const Timetable = ({ data, setData }) => {
                     </select>
                 </div>
 
-                ${viewType !== 'master' && html`
+                ${viewType !== 'master' ? html`
                     <div class="space-y-1">
                         <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">
                             ${viewType === 'class' ? 'Select Grade' : 'Select Teacher'}
@@ -196,6 +213,17 @@ export const Timetable = ({ data, setData }) => {
                                 ? grades.map(g => html`<option value=${g}>${g}</option>`)
                                 : teachers.map(t => html`<option value=${t.id}>${t.name}</option>`)
                             }
+                        </select>
+                    </div>
+                ` : html`
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Group Filter</label>
+                        <select 
+                            class="p-2.5 bg-slate-50 rounded-xl border-0 text-sm font-bold outline-none min-w-[200px]"
+                            value=${selectedGroup}
+                            onChange=${e => setSelectedGroup(e.target.value)}
+                        >
+                            ${groups.map(g => html`<option value=${g.id}>${g.label}</option>`)}
                         </select>
                     </div>
                 `}
@@ -249,9 +277,9 @@ export const Timetable = ({ data, setData }) => {
                 <div class="p-6 border-b bg-slate-50 text-center space-y-1 print:bg-white print:border-black">
                     <h1 class="text-xl font-black uppercase text-slate-900">${data.settings.schoolName}</h1>
                     <div class="flex justify-center items-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                        <span>Class: ${selectedFilter || 'Full School'}</span>
+                        <span>${viewType === 'master' ? groups.find(g => g.id === selectedGroup)?.label : (selectedFilter || 'Full School')}</span>
                         <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                        <span>Academic Timetable</span>
+                        <span>${viewType === 'master' ? 'Master Timetable' : 'Academic Timetable'}</span>
                         <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
                         <span>Year: ${data.settings.academicYear}</span>
                     </div>
@@ -261,7 +289,12 @@ export const Timetable = ({ data, setData }) => {
                     <div class=${`min-w-[${Math.max(800, slots.length * 100)}px] border-l border-t print:border-black`}>
                         <!-- Time Header Row -->
                         <div class="flex bg-slate-100 border-b print:bg-white print:border-black">
-                            <div class="w-32 p-3 border-r font-black text-[10px] text-slate-400 uppercase bg-slate-50 print:border-black">Day / Time</div>
+                            ${viewType === 'master' ? html`
+                                <div class="w-24 p-3 border-r font-black text-[10px] text-slate-400 uppercase bg-slate-50 print:border-black">Day</div>
+                                <div class="w-24 p-3 border-r font-black text-[10px] text-slate-400 uppercase bg-slate-50 print:border-black">Class</div>
+                            ` : html`
+                                <div class="w-32 p-3 border-r font-black text-[10px] text-slate-400 uppercase bg-slate-50 print:border-black">Day / Time</div>
+                            `}
                             ${slots.map(slot => html`
                                 <div class=${`flex-1 p-3 border-r font-black text-[10px] text-center uppercase print:border-black ${slot.type === 'break' ? 'text-orange-600 bg-orange-50/50' : 'text-slate-500'}`}>
                                     ${slot.label}
@@ -269,19 +302,40 @@ export const Timetable = ({ data, setData }) => {
                             `)}
                         </div>
 
-                        <!-- Days Rows -->
-                        ${days.map(day => html`
-                            <div class="flex">
-                                <div class="w-32 p-3 border-r border-b bg-slate-50 font-black text-[10px] text-slate-500 flex items-center justify-center uppercase print:border-black">
-                                    ${day}
-                                </div>
-                                ${slots.map(slot => html`
-                                    <div class="flex-1 border-r border-b min-h-[70px] print:border-black">
-                                        ${renderCell(day, slot)}
+                        <!-- Content Rows -->
+                        ${viewType !== 'master' ? 
+                            days.map(day => html`
+                                <div class="flex">
+                                    <div class="w-32 p-3 border-r border-b bg-slate-50 font-black text-[10px] text-slate-500 flex items-center justify-center uppercase print:border-black">
+                                        ${day}
                                     </div>
-                                `)}
-                            </div>
-                        `)}
+                                    ${slots.map(slot => html`
+                                        <div class="flex-1 border-r border-b min-h-[70px] print:border-black">
+                                            ${renderCell(day, slot)}
+                                        </div>
+                                    `)}
+                                </div>
+                            `)
+                            :
+                            days.map(day => {
+                                const groupGrades = groups.find(g => g.id === selectedGroup)?.grades || [];
+                                return groupGrades.map((grade, gIdx) => html`
+                                    <div class="flex">
+                                        <div class=${`w-24 p-3 border-r border-b bg-slate-100 font-black text-[10px] text-slate-500 flex items-center justify-center uppercase print:border-black ${gIdx === 0 ? '' : 'text-transparent'}`}>
+                                            ${day}
+                                        </div>
+                                        <div class=${`w-24 p-3 border-r border-b bg-slate-50 font-bold text-[9px] text-slate-600 flex items-center justify-center uppercase print:border-black`}>
+                                            ${grade}
+                                        </div>
+                                        ${slots.map(slot => html`
+                                            <div class="flex-1 border-r border-b min-h-[60px] print:border-black">
+                                                ${renderCell(day, slot, grade)}
+                                            </div>
+                                        `)}
+                                    </div>
+                                `);
+                            })
+                        }
                     </div>
                 </div>
             </div>
