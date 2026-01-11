@@ -24,6 +24,7 @@ export const Sidebar = ({ currentView, setView, isCollapsed, setCollapsed, isMob
                 { id: 'senior-school', label: 'Senior School', icon: '🏅' },
                 { id: 'assessments', label: 'Assessments', icon: '📝' },
                 { id: 'marklist', label: 'Marklist', icon: '🏆' },
+                { id: 'timetable', label: 'Timetable', icon: '📅' },
                 { id: 'result-analysis', label: 'Result Analysis', icon: '📈' },
             ]
         },

@@ -8,6 +8,7 @@ import { Staff } from './components/Staff.js';
 import { Marklist } from './components/Marklist.js';
 import { Assessments } from './components/Assessments.js';
 import { ResultAnalysis } from './components/ResultAnalysis.js';
+import { Timetable } from './components/Timetable.js';
 import { Fees } from './components/Fees.js';
 import { FeesRegister } from './components/FeesRegister.js';
 import { FeeReminder } from './components/FeeReminder.js';
@@ -31,10 +32,65 @@ const App = () => {
     const [loginUsername, setLoginUsername] = useState('');
     const [loginPassword, setLoginPassword] = useState('');
     const [showLoginModal, setShowLoginModal] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     useEffect(() => {
         Storage.save(data);
     }, [data]);
+
+    useEffect(() => {
+        const ws = window.websim || websim;
+        if (!ws) return;
+
+        const initCloudSync = async () => {
+            try {
+                const project = await ws.getCurrentProject();
+                const remoteData = await Storage.pullFromCloud(project.id);
+                if (remoteData) {
+                    setData(prev => Storage.mergeData(prev, remoteData, 'all'));
+                }
+            } catch (err) {
+                console.warn("Initial cloud sync skipped:", err);
+            }
+        };
+
+        const handleRemoteUpdate = async (event) => {
+            const { comment } = event;
+            if (comment && comment.raw_content && comment.raw_content.includes('[DATA_SYNC]')) {
+                const match = comment.raw_content.match(/\[DATA_SYNC\]\s+(https?:\/\/[^\s\)]+)/);
+                if (match && match[1]) {
+                    setIsSyncing(true);
+                    try {
+                        const response = await fetch(match[1]);
+                        const remoteData = await response.json();
+                        setData(prev => Storage.mergeData(prev, remoteData, 'all'));
+                    } catch (e) {
+                        console.error("Failed to fetch remote update");
+                    } finally {
+                        setTimeout(() => setIsSyncing(false), 2000);
+                    }
+                }
+            }
+        };
+
+        initCloudSync();
+        ws.addEventListener('comment:created', handleRemoteUpdate);
+        return () => ws.removeEventListener('comment:created', handleRemoteUpdate);
+    }, []);
+
+    const handleCloudPush = async () => {
+        const ws = window.websim || websim;
+        if (!ws) {
+            alert("Cloud services are currently unavailable. Please try refreshing the page.");
+            return;
+        }
+        setIsSyncing(true);
+        const result = await Storage.pushToCloud(data);
+        if (result && result.error) {
+            alert("Cloud sync failed: " + result.error);
+        }
+        setIsSyncing(false);
+    };
 
     useEffect(() => {
         if (!data || !data.settings) return;
@@ -208,6 +264,7 @@ const App = () => {
                     <${SeniorSchool} data=${data} setData=${setData} />
                 </div>
             `;
+            case 'timetable': return html`<${Timetable} data=${data} setData=${setData} />`;
             case 'result-analysis': return html`
                 <div class="space-y-4">
                     <div class="flex justify-end"><${AcademicTransferUI} type="academic-full" /></div>
@@ -273,7 +330,21 @@ const App = () => {
                     <span class="font-black tracking-tight text-lg hidden sm:block">${data.settings.schoolName}</span>
                 </div>
                 
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <button 
+                        onClick=${handleCloudPush}
+                        class=${`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all border ${
+                            isSyncing 
+                            ? 'bg-blue-50 border-blue-200 text-blue-600 animate-pulse' 
+                            : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-primary hover:text-primary'
+                        }`}
+                    >
+                        <span class=${isSyncing ? 'animate-spin' : ''}>${isSyncing ? '⏳' : '☁️'}</span>
+                        <span class="hidden sm:inline">${isSyncing ? 'Syncing...' : 'Cloud Sync'}</span>
+                    </button>
+
+                    <div class="h-8 w-px bg-slate-100 mx-1 hidden sm:block"></div>
+
                     ${isAdmin ? html`
                         <div class="flex items-center gap-2">
                             <span class="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold uppercase">Admin Mode</span>
