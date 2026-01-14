@@ -16,6 +16,7 @@ import { Transport } from './components/Transport.js';
 import { Library } from './components/Library.js';
 import { Payroll } from './components/Payroll.js';
 import { SeniorSchool } from './components/SeniorSchool.js';
+import { Archives } from './components/Archives.js';
 import { Settings } from './components/Settings.js';
 import { Sidebar } from './components/Sidebar.js';
 import { Storage } from './lib/storage.js';
@@ -277,6 +278,7 @@ const App = () => {
             case 'transport': return html`<${Transport} data=${data} setData=${setData} />`;
             case 'library': return html`<${Library} data=${data} setData=${setData} />`;
             case 'payroll': return html`<${Payroll} data=${data} setData=${setData} />`;
+            case 'archives': return html`<${Archives} data=${data} />`;
             case 'settings': return html`<${Settings} data=${data} setData=${setData} />`;
             case 'student-detail': return html`<${StudentDetail} student=${selectedStudent} data=${data} setData=${setData} onBack=${() => setView('students')} />`;
             default: return html`<${Dashboard} data=${data} />`;
