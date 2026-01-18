@@ -233,45 +233,6 @@ export const Settings = ({ data, setData }) => {
                     </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-orange-100 bg-gradient-to-br from-white to-orange-50/30">
-                    <h3 class="font-bold mb-4 flex items-center gap-2 text-orange-800">
-                        <span class="w-4 h-4 bg-orange-500 rounded text-white flex items-center justify-center text-[10px]">📅</span>
-                        Academic Year Transition
-                    </h3>
-                    <div class="space-y-4">
-                        <p class="text-xs text-slate-500 leading-relaxed">
-                            Closing the current academic year will create a read-only <b>Archive Snapshot</b> of all marks, payments, and payroll records. This will clear active academic data to provide a clean slate for the next year.
-                        </p>
-                        <div class="flex flex-col sm:flex-row items-center gap-3">
-                            <div class="flex-1 w-full">
-                                <label class="text-[10px] font-black text-slate-400 uppercase mb-1 block">Target Next Year</label>
-                                <select 
-                                    id="nextYearSelect"
-                                    class="w-full p-3 bg-white border border-orange-200 rounded-xl outline-none font-black text-orange-900"
-                                >
-                                    ${Array.from({ length: 10 }, (_, i) => {
-                                        const year = 2024 + i;
-                                        return html`<option value="${year}/${year + 1}">${year}/${year + 1}</option>`;
-                                    })}
-                                </select>
-                            </div>
-                            <button 
-                                onClick=${() => {
-                                    const nextYear = document.getElementById('nextYearSelect').value;
-                                    if(confirm(`WARNING: This will ARCHIVE all current marks and payments for ${settings.academicYear} and RESET for ${nextYear}. Proceed?`)) {
-                                        const newData = Storage.archiveYear(data, nextYear);
-                                        setData(newData);
-                                        alert('Academic year closed successfully! You can access the records in the Archives menu.');
-                                    }
-                                }}
-                                class="w-full sm:w-auto px-6 py-4 bg-orange-600 text-white rounded-xl font-black text-sm shadow-lg shadow-orange-100 hover:bg-orange-700 transition-all shrink-0"
-                            >
-                                Close Year & Archive
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                     <h3 class="font-bold mb-4 flex items-center gap-2">
                         <span class="w-4 h-4 bg-purple-500 rounded text-white flex items-center justify-center text-[10px]">K</span>
