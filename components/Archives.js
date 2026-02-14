@@ -39,6 +39,20 @@ export const Archives = ({ data }) => {
                             onClick=${() => setActiveSubView('marklist')}
                             class=${`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeSubView === 'marklist' ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
                         >Marklists</button>
+                        <button
+                            onClick=${() => {
+                                if (confirm(`Restore archived year ${selectedArchive.academicYear} into active data? This will replace current active assessments/payments/remarks/payroll/transport/library with the archived snapshot.`)) {
+                                    const restored = Storage.restoreArchive(data, selectedArchive.academicYear);
+                                    // We can't call setData here since Archives doesn't have setData prop; emit a window event for the app to pick up
+                                    window.dispatchEvent(new CustomEvent('edutrack:restore', { detail: { restored } }));
+                                    alert('Archive restored. Returning to Archives view.');
+                                    setSelectedArchive(null);
+                                }
+                            }}
+                            class="ml-2 px-4 py-2 rounded-lg text-xs font-bold transition-all bg-green-50 text-green-700 hover:bg-green-100"
+                        >
+                            Restore Archive
+                        </button>
                     </div>
                 </div>
 
@@ -88,7 +102,7 @@ export const Archives = ({ data }) => {
                             onClick=${() => setSelectedArchive(archive)}
                             class="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-primary transition-colors shadow-lg shadow-slate-200"
                         >
-                            Open Records
+                            View Records
                         </button>
                     </div>
                 `)}

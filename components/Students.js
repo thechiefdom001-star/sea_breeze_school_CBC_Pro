@@ -11,11 +11,13 @@ export const Students = ({ data, setData, onSelectStudent }) => {
     const [filterFinance, setFilterFinance] = useState('ALL');
     const feeOptions = [
         { key: 'admission', label: 'Admission' }, { key: 'diary', label: 'Diary' }, { key: 'development', label: 'Development' },
-        { key: 't1', label: 'Term 1' }, { key: 't2', label: 'Term 2' }, { key: 't3', label: 'Term 3' },
+        { key: 't1', label: 'T1 Tuition' }, { key: 't2', label: 'T2 Tuition' }, { key: 't3', label: 'T3 Tuition' },
         { key: 'boarding', label: 'Boarding' }, { key: 'breakfast', label: 'Breakfast' }, { key: 'lunch', label: 'Lunch' }, 
         { key: 'trip', label: 'Trip' }, { key: 'bookFund', label: 'Books' }, { key: 'caution', label: 'Caution' }, 
-        { key: 'uniform', label: 'Uniform' }, { key: 'studentCard', label: 'ID Card' }, { key: 'remedial', label: 'Remedials' },
-        { key: 'assessmentFee', label: 'Exam Fee' }, { key: 'projectFee', label: 'Project Fee' }
+        { key: 'uniform', label: 'Uniform' }, { key: 'studentCard', label: 'School ID' }, { key: 'remedial', label: 'Remedials' },
+        { key: 'assessmentFee', label: 'Assessment Fee' }, { key: 'projectFee', label: 'Project Fee' },
+        { key: 'activityFees', label: 'Activity Fees' }, { key: 'tieAndBadge', label: 'Tie & Badge' }, { key: 'academicSupport', label: 'Academic Support' },
+        { key: 'pta', label: 'PTA' }
     ];
 
     const [editingId, setEditingId] = useState(null);
@@ -24,12 +26,13 @@ export const Students = ({ data, setData, onSelectStudent }) => {
         grade: data.settings.grades[0] || 'GRADE 1', 
         category: 'Normal',
         admissionNo: '',
+        admissionDate: new Date().toISOString().slice(0,10),
         assessmentNo: '',
         upiNo: '',
         parentContact: '',
         stream: '',
         previousArrears: 0,
-        selectedFees: ['t1', 't2', 't3', 'admission', 'diary', 'development'] 
+        selectedFees: ['t1', 't2', 't3', 'admission', 'diary', 'development', 'pta'] 
     });
 
     const handleAdd = (e) => {
@@ -57,7 +60,7 @@ export const Students = ({ data, setData, onSelectStudent }) => {
             parentContact: '',
             stream: '',
             previousArrears: 0,
-            selectedFees: ['t1', 't2', 't3', 'admission', 'diary', 'development']
+            selectedFees: ['t1', 't2', 't3', 'admission', 'diary', 'development', 'pta']
         });
         setEditingId(null);
     };
@@ -170,7 +173,7 @@ export const Students = ({ data, setData, onSelectStudent }) => {
             <div class="print-only mb-6 flex flex-col items-center text-center">
                 <img src="${data.settings.schoolLogo}" class="w-16 h-16 mb-2 object-contain" alt="Logo" />
                 <h1 class="text-2xl font-black uppercase">${data.settings.schoolName}</h1>
-                <h2 class="text-sm font-bold uppercase text-slate-500 mt-1">Class Register: ${filterGrade === 'ALL' ? 'All Students' : filterGrade}</h2>
+                <h2 class="text-sm font-bold uppercase text-slate-500 mt-1">Class Register: ${filterGrade === 'ALL' ? 'All Students' : filterGrade} (${data.settings.academicYear})</h2>
                 <p class="text-[10px] text-slate-400 mt-1">Printed on ${new Date().toLocaleDateString()}</p>
             </div>
 
@@ -195,6 +198,15 @@ export const Students = ({ data, setData, onSelectStudent }) => {
                                 class="w-full p-3 bg-slate-50 rounded-lg border-0 focus:ring-2 focus:ring-blue-500 outline-none"
                                 value=${newStudent.admissionNo}
                                 onInput=${(e) => setNewStudent({...newStudent, admissionNo: e.target.value})}
+                            />
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Admission Date</label>
+                            <input 
+                                type="date"
+                                class="w-full p-3 bg-slate-50 rounded-lg border-0 focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                                value=${newStudent.admissionDate}
+                                onChange=${(e) => setNewStudent({...newStudent, admissionDate: e.target.value})}
                             />
                         </div>
                         <div class="space-y-1">
@@ -298,6 +310,7 @@ export const Students = ({ data, setData, onSelectStudent }) => {
                         <tr>
                             <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Name</th>
                             <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Adm No</th>
+                            <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Adm Date</th>
                             <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">UPI No</th>
                             <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Assess No</th>
                             <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Parent Contact</th>
@@ -313,6 +326,7 @@ export const Students = ({ data, setData, onSelectStudent }) => {
                                     <div class="text-[9px] text-slate-400 uppercase">${student.stream || 'No Stream'}</div>
                                 </td>
                                 <td class="px-6 py-4 text-slate-500 text-sm font-mono">${student.admissionNo}</td>
+                                <td class="px-6 py-4 text-slate-500 text-xs font-mono">${student.admissionDate || '-'}</td>
                                 <td class="px-6 py-4 text-slate-500 text-xs font-mono">${student.upiNo || '-'}</td>
                                 <td class="px-6 py-4 text-slate-500 text-xs font-mono">${student.assessmentNo || '-'}</td>
                                 <td class="px-6 py-4 text-slate-700 text-xs font-bold">${student.parentContact || '-'}</td>

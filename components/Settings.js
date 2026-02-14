@@ -1,6 +1,7 @@
 import { h } from 'preact';
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import htm from 'htm';
+import { Storage } from '../lib/storage.js';
 
 const html = htm.bind(h);
 
@@ -10,7 +11,10 @@ export const Settings = ({ data, setData }) => {
     }
 
     const [updating, setUpdating] = useState(false);
+    const [expandedGroups, setExpandedGroups] = useState([]);
+    const [editingFeeGrade, setEditingFeeGrade] = useState(null);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [hiddenFeeItems, setHiddenFeeItems] = useState({});
     const [pendingImportData, setPendingImportData] = useState(null);
     const [importSelections, setImportSelections] = useState({
         students: true,
@@ -21,7 +25,11 @@ export const Settings = ({ data, setData }) => {
         modules: true
     });
     
-    const settings = data.settings;
+    const [localSettings, setLocalSettings] = useState(data.settings);
+    useEffect(() => {
+        setLocalSettings(data.settings || {});
+    }, [data.settings]);
+    const settings = localSettings;
 
     const updateFee = (grade, field, val) => {
         const newStructures = (settings.feeStructures || []).map(f => 
@@ -34,8 +42,10 @@ export const Settings = ({ data, setData }) => {
     };
 
     const handleUpdateProfile = () => {
+        // Apply local settings to global data when saving
         setUpdating(true);
-        setTimeout(() => setUpdating(false), 1500);
+        setData({ ...data, settings: { ...settings } });
+        setTimeout(() => setUpdating(false), 1000);
     };
 
     const handleImageUpload = async (e, field) => {
@@ -58,9 +68,9 @@ export const Settings = ({ data, setData }) => {
         { key: 'admission', label: 'Adm' },
         { key: 'diary', label: 'Diary' },
         { key: 'development', label: 'Dev' },
-        { key: 't1', label: 'T1' },
-        { key: 't2', label: 'T2' },
-        { key: 't3', label: 'T3' },
+        { key: 't1', label: 'T1 Tuition' },
+        { key: 't2', label: 'T2 Tuition' },
+        { key: 't3', label: 'T3 Tuition' },
         { key: 'boarding', label: 'Board' },
         { key: 'breakfast', label: 'Brkfast' },
         { key: 'lunch', label: 'Lunch' },
@@ -68,10 +78,14 @@ export const Settings = ({ data, setData }) => {
         { key: 'bookFund', label: 'Books' },
         { key: 'caution', label: 'Caution' },
         { key: 'uniform', label: 'Uniform' },
-        { key: 'studentCard', label: 'Card' },
+        { key: 'studentCard', label: 'School ID' },
         { key: 'remedial', label: 'Remed' },
-        { key: 'assessmentFee', label: 'Exam' },
-        { key: 'projectFee', label: 'Project' }
+        { key: 'assessmentFee', label: 'Assessment Fee' },
+        { key: 'projectFee', label: 'Project' },
+        { key: 'activityFees', label: 'Activity Fees' },
+        { key: 'tieAndBadge', label: 'Tie & Badge' },
+        { key: 'academicSupport', label: 'Academic Support' },
+        { key: 'pta', label: 'PTA' }
     ];
 
     const handleExport = () => {
@@ -233,6 +247,45 @@ export const Settings = ({ data, setData }) => {
                     </div>
                 </div>
 
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-orange-100 bg-gradient-to-br from-white to-orange-50/30">
+                    <h3 class="font-bold mb-4 flex items-center gap-2 text-orange-800">
+                        <span class="w-4 h-4 bg-orange-500 rounded text-white flex items-center justify-center text-[10px]">📅</span>
+                        Academic Year Transition
+                    </h3>
+                    <div class="space-y-4">
+                        <p class="text-xs text-slate-500 leading-relaxed">
+                            Closing the current academic year will create a read-only <b>Archive Snapshot</b> of all marks, payments, and payroll records. This will clear active academic data to provide a clean slate for the next year.
+                        </p>
+                        <div class="flex flex-col sm:flex-row items-center gap-3">
+                            <div class="flex-1 w-full">
+                                <label class="text-[10px] font-black text-slate-400 uppercase mb-1 block">Target Next Year</label>
+                                <select 
+                                    id="nextYearSelect"
+                                    class="w-full p-3 bg-white border border-orange-200 rounded-xl outline-none font-black text-orange-900"
+                                >
+                                    ${Array.from({ length: 10 }, (_, i) => {
+                                        const year = 2025 + i;
+                                        return html`<option value="${year}/${year + 1}">${year}/${year + 1}</option>`;
+                                    })}
+                                </select>
+                            </div>
+                            <button 
+                                onClick=${() => {
+                                    const nextYear = document.getElementById('nextYearSelect').value;
+                                    if(confirm(`WARNING: This will ARCHIVE all current marks and payments for ${settings.academicYear} and RESET for ${nextYear}. Proceed?`)) {
+                                        const newData = Storage.archiveYear(data, nextYear);
+                                        setData(newData);
+                                        alert('Academic year closed successfully! You can access the records in the Archives menu.');
+                                    }
+                                }}
+                                class="w-full sm:w-auto px-6 py-4 bg-orange-600 text-white rounded-xl font-black text-sm shadow-lg shadow-orange-100 hover:bg-orange-700 transition-all shrink-0"
+                            >
+                                Close Year & Archive
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                     <h3 class="font-bold mb-4 flex items-center gap-2">
                         <span class="w-4 h-4 bg-purple-500 rounded text-white flex items-center justify-center text-[10px]">K</span>
@@ -262,34 +315,260 @@ export const Settings = ({ data, setData }) => {
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <h3 class="font-bold mb-6">Fee Structure per Grade (${settings.currency})</h3>
-                    <div class="overflow-x-auto no-scrollbar">
-                        <table class="w-full text-[10px] text-left border-collapse">
-                            <thead class="bg-slate-50 text-slate-500 uppercase font-bold sticky top-0">
-                                <tr>
-                                    <th class="p-2 border bg-slate-50 min-w-[80px]">Grade</th>
-                                    ${feeColumns.map(col => html`<th class="p-2 border min-w-[60px] text-center">${col.label}</th>`)}
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100">
-                                ${(settings.feeStructures || []).map(fee => html`
-                                    <tr key=${fee.grade}>
-                                        <td class="p-2 font-bold text-slate-700 border bg-white">${fee.grade}</td>
-                                        ${feeColumns.map(col => html`
-                                            <td class="p-1 border">
+                    
+                    <!-- Grade Group Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${[
+                            { id: 'pp1-pp2', label: 'PP1 - PP2', grades: ['PP1', 'PP2'], color: 'bg-pink-50 border-pink-200' },
+                            { id: 'grade1-3', label: 'Grade 1 - 3', grades: ['GRADE 1', 'GRADE 2', 'GRADE 3'], color: 'bg-blue-50 border-blue-200' },
+                            { id: 'grade4-6', label: 'Grade 4 - 6', grades: ['GRADE 4', 'GRADE 5', 'GRADE 6'], color: 'bg-green-50 border-green-200' },
+                            { id: 'grade7-9', label: 'Grade 7 - 9', grades: ['GRADE 7', 'GRADE 8', 'GRADE 9'], color: 'bg-orange-50 border-orange-200' },
+                            { id: 'grade10-12', label: 'Grade 10 - 12', grades: ['GRADE 10', 'GRADE 11', 'GRADE 12'], color: 'bg-purple-50 border-purple-200' }
+                        ].map(group => {
+                            const groupStructures = (settings.feeStructures || []).filter(f => group.grades.includes(f.grade));
+                            const isExpanded = expandedGroups.includes(group.id);
+                            const compulsoryFees = settings.compulsoryFees?.[group.id] || {};
+                            
+                            return html`
+                                <div class="border border-slate-200 rounded-xl overflow-hidden shadow-lg shadow-slate-200/50">
+                                    <div class=${`p-4 flex items-center justify-between ${group.color}`}>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-bold text-sm">${group.label}</span>
+                                            <span class="text-xs bg-white px-2 py-0.5 rounded-full">${groupStructures.length} grades</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <button 
+                                                onClick=${() => setExpandedGroups(isExpanded ? expandedGroups.filter(g => g !== group.id) : [...expandedGroups, group.id])}
+                                                class="p-1.5 bg-white rounded-lg text-xs font-bold shadow-sm hover:bg-slate-50"
+                                            >
+                                                ${isExpanded ? '▲' : '▼'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    ${isExpanded && html`
+                                        <div class="p-4 bg-white space-y-3 max-h-96 overflow-y-auto">
+                                            ${groupStructures.length === 0 ? html`
+                                                <p class="text-xs text-slate-400 text-center py-4">No fee structures defined</p>
+                                            ` : groupStructures.map(fee => html`
+                                                <div class="border border-slate-100 rounded-lg p-3 space-y-2">
+                                                    <div class="flex items-center justify-between">
+                                                        <span class="font-bold text-sm">${fee.grade}</span>
+                                                        <div class="flex gap-1">
+                                                            <button 
+                                                                onClick=${() => setEditingFeeGrade(fee.grade)}
+                                                                class="text-blue-600 text-[10px] font-bold px-2 py-1 hover:bg-blue-50 rounded"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                            <button 
+                                                                onClick=${() => {
+                                                                    if (confirm('Delete this fee structure?')) {
+                                                                        const newData = { ...data, settings: { ...settings, feeStructures: settings.feeStructures.filter(f => f.grade !== fee.grade) }};
+                                                                        setData(newData);
+                                                                    }
+                                                                }}
+                                                                class="text-red-500 text-[10px] font-bold px-2 py-1 hover:bg-red-50 rounded"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="grid grid-cols-2 gap-2 text-[9px]">
+                                                        <div class="flex justify-between bg-slate-50 p-1.5 rounded">
+                                                            <span class="text-slate-500">T1 Tuition:</span>
+                                                            <span class="font-bold">${(fee.t1 || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div class="flex justify-between bg-slate-50 p-1.5 rounded">
+                                                            <span class="text-slate-500">T2 Tuition:</span>
+                                                            <span class="font-bold">${(fee.t2 || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div class="flex justify-between bg-slate-50 p-1.5 rounded">
+                                                            <span class="text-slate-500">T3 Tuition:</span>
+                                                            <span class="font-bold">${(fee.t3 || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div class="flex justify-between bg-slate-50 p-1.5 rounded">
+                                                            <span class="text-slate-500">Admission:</span>
+                                                            <span class="font-bold">${(fee.admission || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div class="flex justify-between bg-slate-50 p-1.5 rounded">
+                                                            <span class="text-slate-500">Boarding:</span>
+                                                            <span class="font-bold">${(fee.boarding || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div class="flex justify-between bg-slate-50 p-1.5 rounded">
+                                                            <span class="text-slate-500">Development:</span>
+                                                            <span class="font-bold">${(fee.development || 0).toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            `)}
+                                            
+                                            <!-- Fee Items Toggle Section -->
+                                            <div class="border-t border-slate-100 pt-3 mt-3">
+                                                <p class="text-xs font-bold text-slate-500 mb-2">Fee Items - Compulsory/Optional</p>
+                                                <div class="space-y-1.5">
+                                                    ${feeColumns.map(col => {
+                                                        const isCompulsory = compulsoryFees[col.key] !== false;
+                                                        const isHidden = (hiddenFeeItems[group.id] || []).includes(col.key);
+                                                        return html`
+                                                            <div key=${col.key} class=${`flex items-center justify-between bg-slate-50 rounded-lg p-2 ${isHidden ? 'opacity-40' : ''}`}>
+                                                                <div class="flex items-center gap-2">
+                                                                    <span class="text-[10px] font-medium">${col.label}</span>
+                                                                    ${isHidden && html`<span class="text-[8px] text-red-500 font-bold">(Hidden)</span>`}
+                                                                </div>
+                                                                <div class="flex gap-1">
+                                                                    <button 
+                                                                        onClick=${() => {
+                                                                            const currentCompulsory = settings.compulsoryFees || {};
+                                                                            const groupCompulsory = { ...(currentCompulsory[group.id] || {}) };
+                                                                            groupCompulsory[col.key] = !isCompulsory;
+                                                                            setData({
+                                                                                ...data,
+                                                                                settings: {
+                                                                                    ...settings,
+                                                                                    compulsoryFees: {
+                                                                                        ...currentCompulsory,
+                                                                                        [group.id]: groupCompulsory
+                                                                                    }
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                        class=${`text-[9px] font-bold px-2 py-1 rounded-full ${isCompulsory ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}`}
+                                                                    >
+                                                                        ${isCompulsory ? 'Compulsory' : 'Optional'}
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick=${() => {
+                                                                            const currentHidden = hiddenFeeItems[group.id] || [];
+                                                                            const newHidden = isHidden 
+                                                                                ? currentHidden.filter(k => k !== col.key)
+                                                                                : [...currentHidden, col.key];
+                                                                            setHiddenFeeItems({
+                                                                                ...hiddenFeeItems,
+                                                                                [group.id]: newHidden
+                                                                            });
+                                                                        }}
+                                                                        class=${`text-[9px] font-bold px-2 py-1 rounded-full ${isHidden ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}
+                                                                    >
+                                                                        ${isHidden ? 'Show' : 'Hide'}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        `;
+                                                    })}
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Add/Edit Grade Button -->
+                                            <button 
+                                                onClick=${() => {
+                                                    const gradeName = prompt('Enter grade name (e.g., GRADE 1):');
+                                                    if (!gradeName) return;
+                                                    const newStructure = {
+                                                        grade: gradeName.toUpperCase(),
+                                                        t1: 0, t2: 0, t3: 0,
+                                                        admission: 0, diary: 0, development: 0,
+                                                        boarding: 0, breakfast: 0, lunch: 0,
+                                                        trip: 0, bookFund: 0, caution: 0,
+                                                        uniform: 0, studentCard: 0, remedial: 0,
+                                                        assessmentFee: 0, projectFee: 0,
+                                                        activityFees: 0, tieAndBadge: 0,
+                                                        academicSupport: 0, pta: 0
+                                                    };
+                                                    setData({
+                                                        ...data,
+                                                        settings: {
+                                                            ...settings,
+                                                            feeStructures: [...settings.feeStructures, newStructure],
+                                                            grades: settings.grades.includes(gradeName.toUpperCase()) ? settings.grades : [...settings.grades, gradeName.toUpperCase()]
+                                                        }
+                                                    });
+                                                }}
+                                                class="w-full py-2 mt-3 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700"
+                                            >
+                                                + Add Grade to Group
+                                            </button>
+                                        </div>
+                                    `}
+                                </div>
+                            `;
+                        })}
+                    </div>
+                    
+                    ${!expandedGroups.includes('pp1-pp2') && html`
+                        <div class="mt-4 p-4 bg-blue-50 rounded-xl">
+                            <p class="text-xs text-blue-600 font-bold">💡 Click the expand button (▼) on a grade group card to view fee details, toggle compulsory/optional fees, or add new grades.</p>
+                        </div>
+                    `}
+                </div>
+
+                <!-- Edit Fee Modal -->
+                ${editingFeeGrade && (() => {
+                    const feeStructure = settings.feeStructures.find(f => f.grade === editingFeeGrade);
+                    if (!feeStructure) return null;
+                    
+                    const gradeGroup = [
+                        { id: 'pp1-pp2', grades: ['PP1', 'PP2'] },
+                        { id: 'grade1-3', grades: ['GRADE 1', 'GRADE 2', 'GRADE 3'] },
+                        { id: 'grade4-6', grades: ['GRADE 4', 'GRADE 5', 'GRADE 6'] },
+                        { id: 'grade7-9', grades: ['GRADE 7', 'GRADE 8', 'GRADE 9'] },
+                        { id: 'grade10-12', grades: ['GRADE 10', 'GRADE 11', 'GRADE 12'] }
+                    ].find(g => g.grades.includes(editingFeeGrade));
+                    const groupId = gradeGroup?.id || 'pp1-pp2';
+                    const groupHiddenItems = hiddenFeeItems[groupId] || [];
+                    
+                    return html`
+                        <div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                            <div class="bg-white w-full max-w-2xl rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-xl font-black">Edit Fees: ${editingFeeGrade}</h3>
+                                    <button onClick=${() => setEditingFeeGrade(null)} class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                    ${feeColumns.map(col => {
+                                        const isHidden = groupHiddenItems.includes(col.key);
+                                        return html`
+                                            <div class=${`space-y-1 ${isHidden ? 'opacity-50' : ''}`}>
+                                                <div class="flex items-center justify-between">
+                                                    <label class="text-[10px] font-bold text-slate-500 uppercase">${col.label}</label>
+                                                    <button 
+                                                        onClick=${() => {
+                                                            const currentHidden = hiddenFeeItems[groupId] || [];
+                                                            const newHidden = isHidden 
+                                                                ? currentHidden.filter(k => k !== col.key)
+                                                                : [...currentHidden, col.key];
+                                                            setHiddenFeeItems({
+                                                                ...hiddenFeeItems,
+                                                                [groupId]: newHidden
+                                                            });
+                                                        }}
+                                                        class=${`text-[8px] font-bold px-1.5 py-0.5 rounded ${isHidden ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}
+                                                    >
+                                                        ${isHidden ? 'Show' : 'Hide'}
+                                                    </button>
+                                                </div>
                                                 <input 
                                                     type="number" 
-                                                    class="w-full p-1 bg-slate-50 rounded text-center focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                    value=${fee[col.key] || 0} 
-                                                    onInput=${(e) => updateFee(fee.grade, col.key, e.target.value)} 
+                                                    class="w-full p-2 bg-slate-50 rounded-lg text-sm font-bold border border-slate-200 focus:border-blue-500 outline-none"
+                                                    value=${feeStructure[col.key] || 0}
+                                                    onInput=${(e) => {
+                                                        const newStructures = settings.feeStructures.map(f => 
+                                                            f.grade === editingFeeGrade ? { ...f, [col.key]: Number(e.target.value) } : f
+                                                        );
+                                                        setData({ ...data, settings: { ...settings, feeStructures: newStructures } });
+                                                    }}
                                                 />
-                                            </td>
-                                        `)}
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                                            </div>
+                                        `;
+                                    })}
+                                </div>
+                                <div class="flex gap-3 mt-6">
+                                    <button onClick=${() => setEditingFeeGrade(null)} class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">Done</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                })()}
 
                 <!-- Selective Import Modal -->
                 ${showImportModal && html`
@@ -420,10 +699,10 @@ export const Settings = ({ data, setData }) => {
                             <label class="text-xs font-bold text-slate-500 uppercase">Academic Year</label>
                             <select 
                                 class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400 font-bold"
-                                value=${settings.academicYear || '2024/2025'}
+                                value=${settings.academicYear || '2025/2026'}
                                 onChange=${(e) => setData({...data, settings: {...settings, academicYear: e.target.value}})}
                             >
-                                ${Array.from({ length: 27 }, (_, i) => 2024 + i).map(year => html`
+                                ${Array.from({ length: 27 }, (_, i) => 2025 + i).map(year => html`
                                     <option value="${year}/${year + 1}">${year}/${year + 1}</option>
                                 `)}
                             </select>

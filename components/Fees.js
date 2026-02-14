@@ -17,9 +17,9 @@ export const Fees = ({ data, setData }) => {
         { key: 'admission', label: 'Admission' },
         { key: 'diary', label: 'Diary' },
         { key: 'development', label: 'Development' },
-        { key: 't1', label: 'Term 1' },
-        { key: 't2', label: 'Term 2' },
-        { key: 't3', label: 'Term 3' },
+        { key: 't1', label: 'T1 Tuition' },
+        { key: 't2', label: 'T2 Tuition' },
+        { key: 't3', label: 'T3 Tuition' },
         { key: 'boarding', label: 'Boarding' },
         { key: 'breakfast', label: 'Breakfast' },
         { key: 'lunch', label: 'Lunch' },
@@ -27,10 +27,14 @@ export const Fees = ({ data, setData }) => {
         { key: 'bookFund', label: 'Book Fund' },
         { key: 'caution', label: 'Caution' },
         { key: 'uniform', label: 'Uniform' },
-        { key: 'studentCard', label: 'ID Card' },
+        { key: 'studentCard', label: 'School ID' },
         { key: 'remedial', label: 'Remedials' },
-        { key: 'assessmentFee', label: 'Exam Fee' },
-        { key: 'projectFee', label: 'Project Fee' }
+        { key: 'assessmentFee', label: 'Assessment Fee' },
+        { key: 'projectFee', label: 'Project Fee' },
+        { key: 'activityFees', label: 'Activity Fees' },
+        { key: 'tieAndBadge', label: 'Tie & Badge' },
+        { key: 'academicSupport', label: 'Academic Support' },
+        { key: 'pta', label: 'PTA' }
     ];
 
     const terms = ['T1', 'T2', 'T3'];
@@ -63,6 +67,7 @@ export const Fees = ({ data, setData }) => {
             amount: totalAmount,
             items: { ...paymentItems },
             term: selectedTerm,
+            academicYear: data.settings.academicYear,
             date: new Date().toLocaleDateString(),
             receiptNo: 'RCP-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0')
         };
@@ -260,6 +265,7 @@ export const Fees = ({ data, setData }) => {
                             <div class="flex flex-col sm:flex-row justify-between items-start gap-4">
                                 <div>
                                     <h4 class="text-blue-400 print:text-blue-600 font-bold uppercase tracking-widest text-[9px] sm:text-[10px]">Official Payment Receipt - Term ${receipt.term || 'N/A'}</h4>
+                                    <p class="text-[10px] text-slate-400 uppercase font-bold">Academic Year: ${data.settings.academicYear}</p>
                                     <p class="text-xl sm:text-2xl font-black mt-0.5 sm:mt-1">${receipt.receiptNo}</p>
                                 </div>
                                 <div class="text-left sm:text-right w-full sm:w-auto border-t border-slate-800 sm:border-0 pt-2 sm:pt-0">
