@@ -54,16 +54,14 @@ export const Settings = ({ data, setData }) => {
         const file = e.target.files[0];
         if (!file) return;
         
-        try {
-            const url = await window.websim.upload(file);
+        const reader = new FileReader();
+        reader.onload = (event) => {
             setData({
                 ...data, 
-                settings: { ...settings, [field]: url }
+                settings: { ...settings, [field]: event.target.result }
             });
-        } catch (error) {
-            console.error('Upload failed:', error);
-            alert('Failed to upload image. Please try again.');
-        }
+        };
+        reader.readAsDataURL(file);
     };
 
     const feeColumns = [
@@ -854,37 +852,61 @@ export const Settings = ({ data, setData }) => {
                             <div class="space-y-3">
                                 <label class="text-xs font-bold text-slate-500 uppercase block">Principal's Signature</label>
                                 <div class="flex items-center gap-4">
-                                    <label class="w-24 h-12 bg-slate-50 rounded-xl border border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer group shrink-0">
-                                        <img src="${settings.principalSignature}" class="w-full h-full object-contain" />
-                                        <div class="absolute w-24 h-12 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                            <span class="text-[8px] text-white font-bold">Upload</span>
+                                    <label class="w-32 h-16 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer group shrink-0 relative">
+                                        ${settings.principalSignature ? html`
+                                            <img src="${settings.principalSignature}" class="w-full h-full object-contain" />
+                                        ` : html`
+                                            <span class="text-[10px] text-slate-400">Click to upload</span>
+                                        `}
+                                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <span class="text-[10px] text-white font-bold">Upload</span>
                                         </div>
                                         <input type="file" accept="image/*" class="hidden" onChange=${(e) => handleImageUpload(e, 'principalSignature')} />
                                     </label>
-                                    <input 
-                                        class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-[10px]"
-                                        value=${settings.principalSignature}
-                                        onInput=${(e) => setData({...data, settings: {...settings, principalSignature: e.target.value}})}
-                                        placeholder="Signature Image URL"
-                                    />
+                                    <div class="flex-1 flex gap-2">
+                                        <input 
+                                            class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-[10px]"
+                                            value=${settings.principalSignature}
+                                            onInput=${(e) => setData({...data, settings: {...settings, principalSignature: e.target.value}})}
+                                            placeholder="Paste image URL"
+                                        />
+                                        ${settings.principalSignature && html`
+                                            <button 
+                                                onClick=${() => setData({...data, settings: {...settings, principalSignature: ''}})}
+                                                class="px-3 bg-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-200"
+                                            >✕</button>
+                                        `}
+                                    </div>
                                 </div>
                             </div>
                             <div class="space-y-3">
                                 <label class="text-xs font-bold text-slate-500 uppercase block">Accounts Clerk's Signature</label>
                                 <div class="flex items-center gap-4">
-                                    <label class="w-24 h-12 bg-slate-50 rounded-xl border border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer group shrink-0">
-                                        <img src="${settings.clerkSignature}" class="w-full h-full object-contain" />
-                                        <div class="absolute w-24 h-12 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                            <span class="text-[8px] text-white font-bold">Upload</span>
+                                    <label class="w-32 h-16 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer group shrink-0 relative">
+                                        ${settings.clerkSignature ? html`
+                                            <img src="${settings.clerkSignature}" class="w-full h-full object-contain" />
+                                        ` : html`
+                                            <span class="text-[10px] text-slate-400">Click to upload</span>
+                                        `}
+                                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <span class="text-[10px] text-white font-bold">Upload</span>
                                         </div>
                                         <input type="file" accept="image/*" class="hidden" onChange=${(e) => handleImageUpload(e, 'clerkSignature')} />
                                     </label>
-                                    <input 
-                                        class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-[10px]"
-                                        value=${settings.clerkSignature}
-                                        onInput=${(e) => setData({...data, settings: {...settings, clerkSignature: e.target.value}})}
-                                        placeholder="Signature Image URL"
-                                    />
+                                    <div class="flex-1 flex gap-2">
+                                        <input 
+                                            class="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-[10px]"
+                                            value=${settings.clerkSignature}
+                                            onInput=${(e) => setData({...data, settings: {...settings, clerkSignature: e.target.value}})}
+                                            placeholder="Paste image URL"
+                                        />
+                                        ${settings.clerkSignature && html`
+                                            <button 
+                                                onClick=${() => setData({...data, settings: {...settings, clerkSignature: ''}})}
+                                                class="px-3 bg-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-200"
+                                            >✕</button>
+                                        `}
+                                    </div>
                                 </div>
                             </div>
                         </div>
