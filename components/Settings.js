@@ -30,8 +30,23 @@ export const Settings = ({ data, setData }) => {
     const [localSettings, setLocalSettings] = useState(data.settings);
     useEffect(() => {
         setLocalSettings(data.settings || {});
+        // Initialize hiddenFeeItems from saved settings
+        setHiddenFeeItems(data.settings?.hiddenFeeItems || {});
     }, [data.settings]);
     const settings = localSettings;
+
+    // Save hiddenFeeItems to settings when it changes
+    useEffect(() => {
+        if (Object.keys(hiddenFeeItems).length > 0) {
+            setData({
+                ...data,
+                settings: {
+                    ...data.settings,
+                    hiddenFeeItems
+                }
+            });
+        }
+    }, [hiddenFeeItems]);
 
     const updateFee = (grade, field, val) => {
         const newStructures = (settings.feeStructures || []).map(f => 
@@ -911,6 +926,47 @@ export const Settings = ({ data, setData }) => {
                             </div>
                         </div>
 
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-teal-100 mt-6">
+                            <h3 class="font-bold mb-4 flex items-center gap-2 text-teal-800">
+                                <span class="w-4 h-4 bg-teal-500 rounded text-white flex items-center justify-center text-[10px]">🎓</span>
+                                Class Streams Configuration
+                            </h3>
+                            <p class="text-xs text-slate-500 mb-4">
+                                Configure streams for each grade (e.g., A, B, C). Students will be assigned to these streams.
+                            </p>
+                            <div class="flex flex-wrap gap-2">
+                                ${(settings.streams || ['A', 'B', 'C']).map((stream, idx) => html`
+                                    <div key=${idx} class="flex items-center gap-1">
+                                        <input 
+                                            class="w-16 p-2 bg-slate-50 rounded-lg border border-slate-200 text-center font-bold uppercase"
+                                            value=${stream}
+                                            onInput=${(e) => {
+                                                const newStreams = [...(settings.streams || ['A', 'B', 'C'])];
+                                                newStreams[idx] = e.target.value.toUpperCase();
+                                                setData({...data, settings: {...settings, streams: newStreams}});
+                                            }}
+                                        />
+                                        <button 
+                                            onClick=${() => {
+                                                const newStreams = (settings.streams || ['A', 'B', 'C']).filter((_, i) => i !== idx);
+                                                setData({...data, settings: {...settings, streams: newStreams}});
+                                            }}
+                                            class="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                                        >✕</button>
+                                    </div>
+                                `)}
+                                <button 
+                                    onClick=${() => {
+                                        const newStreams = [...(settings.streams || ['A', 'B', 'C']), String.fromCharCode(65 + (settings.streams || ['A', 'B', 'C']).length)];
+                                        setData({...data, settings: {...settings, streams: newStreams}});
+                                    }}
+                                    class="px-4 py-2 bg-teal-100 text-teal-700 rounded-lg text-sm font-bold hover:bg-teal-200"
+                                >
+                                    + Add Stream
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-slate-500 uppercase">School Name</label>
@@ -946,6 +1002,268 @@ export const Settings = ({ data, setData }) => {
                             class=${`w-full py-3 rounded-xl font-bold transition-all shadow-lg ${updating ? 'bg-green-500 text-white shadow-green-100' : 'bg-blue-600 text-white shadow-blue-100'}`}
                         >
                             ${updating ? '✓ Changes Saved Successfully' : 'Update School Profile'}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bank & Mobile Money Details -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
+                        <h3 class="text-white font-black text-lg">💳 Bank & Mobile Money Details</h3>
+                        <p class="text-green-100 text-xs font-medium">Payment information for receipts and fee reminders</p>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Bank Name</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
+                                    value=${settings.bankName || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, bankName: e.target.value}})}
+                                    placeholder="e.g. Kenya Commercial Bank"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Account Number</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
+                                    value=${settings.bankAccount || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, bankAccount: e.target.value}})}
+                                    placeholder="e.g. 1234567890"
+                                />
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">M-Pesa Paybill No.</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
+                                    value=${settings.mpesaPaybill || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, mpesaPaybill: e.target.value}})}
+                                    placeholder="e.g. 123456"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Airtel Money Paybill No.</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
+                                    value=${settings.airtelPaybill || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, airtelPaybill: e.target.value}})}
+                                    placeholder="e.g. 789012"
+                                />
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">M-Pesa Account Name</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
+                                    value=${settings.mpesaAccountName || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, mpesaAccountName: e.target.value}})}
+                                    placeholder="e.g. School Fees Account"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Airtel Account Name</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
+                                    value=${settings.airtelAccountName || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, airtelAccountName: e.target.value}})}
+                                    placeholder="e.g. School Fees Account"
+                                />
+                            </div>
+                        </div>
+                        <button 
+                            onClick=${handleUpdateProfile}
+                            class=${`w-full py-3 rounded-xl font-bold transition-all shadow-lg ${updating ? 'bg-green-500 text-white shadow-green-100' : 'bg-green-600 text-white shadow-green-100'}`}
+                        >
+                            ${updating ? '✓ Saved' : 'Save Payment Details'}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- M-Pesa API Configuration -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="bg-gradient-to-r from-green-600 to-green-800 px-6 py-4">
+                        <h3 class="text-white font-black text-lg">🔐 M-Pesa API Configuration</h3>
+                        <p class="text-green-100 text-xs font-medium">Safaricom Daraja API credentials for STK Push</p>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Consumer Key</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-green-400"
+                                    value=${settings.mpesaConsumerKey || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, mpesaConsumerKey: e.target.value}})}
+                                    placeholder="Enter M-Pesa Consumer Key"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Consumer Secret</label>
+                                <input 
+                                    type="password"
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-green-400"
+                                    value=${settings.mpesaConsumerSecret || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, mpesaConsumerSecret: e.target.value}})}
+                                    placeholder="Enter M-Pesa Consumer Secret"
+                                />
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Shortcode</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-green-400"
+                                    value=${settings.mpesaShortcode || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, mpesaShortcode: e.target.value}})}
+                                    placeholder="e.g. 123456"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Paybill No.</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-green-400"
+                                    value=${settings.mpesaPaybill || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, mpesaPaybill: e.target.value}})}
+                                    placeholder="e.g. 123456"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Callback URL</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-green-400"
+                                    value=${settings.mpesaCallbackUrl || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, mpesaCallbackUrl: e.target.value}})}
+                                    placeholder="https://your-domain.com/callback"
+                                />
+                            </div>
+                        </div>
+                        <button 
+                            onClick=${handleUpdateProfile}
+                            class=${`w-full py-3 rounded-xl font-bold transition-all shadow-lg ${updating ? 'bg-green-500 text-white' : 'bg-green-600 text-white'}`}
+                        >
+                            ${updating ? '✓ Saved' : 'Save M-Pesa API Settings'}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Airtel Money API Configuration -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="bg-gradient-to-r from-red-600 to-red-800 px-6 py-4">
+                        <h3 class="text-white font-black text-lg">🔐 Airtel Money API Configuration</h3>
+                        <p class="text-red-100 text-xs font-medium">Airtel API credentials for payment prompts</p>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">API Key</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-red-400"
+                                    value=${settings.airtelApiKey || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, airtelApiKey: e.target.value}})}
+                                    placeholder="Enter Airtel API Key"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">API Secret</label>
+                                <input 
+                                    type="password"
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-red-400"
+                                    value=${settings.airtelApiSecret || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, airtelApiSecret: e.target.value}})}
+                                    placeholder="Enter Airtel API Secret"
+                                />
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Merchant ID</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-red-400"
+                                    value=${settings.airtelMerchantId || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, airtelMerchantId: e.target.value}})}
+                                    placeholder="Enter Merchant ID"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Callback URL</label>
+                                <input 
+                                    class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-red-400"
+                                    value=${settings.airtelCallbackUrl || ''}
+                                    onInput=${(e) => setData({...data, settings: {...settings, airtelCallbackUrl: e.target.value}})}
+                                    placeholder="https://your-domain.com/airtel-callback"
+                                />
+                            </div>
+                        </div>
+                        <button 
+                            onClick=${handleUpdateProfile}
+                            class=${`w-full py-3 rounded-xl font-bold transition-all shadow-lg ${updating ? 'bg-red-500 text-white' : 'bg-red-600 text-white'}`}
+                        >
+                            ${updating ? '✓ Saved' : 'Save Airtel API Settings'}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Google Sheet Sync Configuration -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+                        <h3 class="text-white font-black text-lg">📊 Teacher Data Sync</h3>
+                        <p class="text-blue-100 text-xs font-medium">Test connection & sync status</p>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase">Deployed Script URL</label>
+                            <input 
+                                class="w-full p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 focus:border-blue-400"
+                                value=${settings.googleScriptUrl || ''}
+                                onInput=${(e) => setData({...data, settings: {...settings, googleScriptUrl: e.target.value}})}
+                                placeholder="https://script.google.com/macros/s/..."
+                            />
+                            <p class="text-[10px] text-slate-400">Current: ${settings.googleScriptUrl ? '✅ Configured' : '❌ Not set'}</p>
+                        </div>
+                        <button 
+                            onClick=${async () => {
+                                if (!settings.googleScriptUrl) {
+                                    alert('Please enter the Script URL first');
+                                    return;
+                                }
+                                try {
+                                    const url = new URL(settings.googleScriptUrl);
+                                    url.searchParams.set('action', 'ping');
+                                    const response = await fetch(url.toString());
+                                    const result = await response.json();
+                                    if (result.success) {
+                                        alert('✅ Connection Successful!\n\n' + result.message + '\n\nThe script is working. Check browser console (F12) for sync details.');
+                                    } else {
+                                        alert('❌ Connection Failed: ' + result.error);
+                                    }
+                                } catch (e) {
+                                    alert('❌ Error: ' + e.message);
+                                }
+                            }}
+                            class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold"
+                        >
+                            🔗 Test Google Connection
+                        </button>
+                        <div class="bg-green-50 p-4 rounded-xl border border-green-200">
+                            <p class="text-xs font-bold text-green-800 mb-2">👨‍🏫 How Teachers Use This:</p>
+                            <p class="text-[10px] text-green-700">1. Teachers open the Google Sheet on their phone</p>
+                            <p class="text-[10px] text-green-700">2. They add/edit scores in the Assessments tab</p>
+                            <p class="text-[10px] text-green-700">3. Admin clicks "Sync" button here to get all data</p>
+                            <p class="text-[10px] text-green-700 mt-2">✅ Each teacher can work on different grades without interference</p>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                            <p class="text-xs font-bold text-blue-800 mb-2">📋 Sheet Columns (Auto-created)</p>
+                            <p class="text-[10px] text-blue-600"><b>Students:</b> id, name, grade, stream, admissionNo, parentContact</p>
+                            <p class="text-[10px] text-blue-600"><b>Assessments:</b> id, studentId, subject, score, term, examType, academicYear, date, level</p>
+                            <p class="text-[10px] text-blue-600"><b>Attendance:</b> id, studentId, date, status, term, academicYear</p>
+                        </div>
+                        <button 
+                            onClick=${handleUpdateProfile}
+                            class=${`w-full py-3 rounded-xl font-bold transition-all shadow-lg ${updating ? 'bg-blue-500 text-white' : 'bg-blue-600 text-white'}`}
+                        >
+                            ${updating ? '✓ Saved' : 'Save Google Sync Settings'}
                         </button>
                     </div>
                 </div>

@@ -1,5 +1,5 @@
 import { h, render } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useCallback } from 'preact/hooks';
 import htm from 'htm';
 import { Dashboard } from './components/Dashboard.js';
 import { Students } from './components/Students.js';
@@ -21,6 +21,7 @@ import { Settings } from './components/Settings.js';
 import { Attendance } from './components/Attendance.js';
 import { Sidebar } from './components/Sidebar.js';
 import { Storage } from './lib/storage.js';
+import { googleSheetSync } from './lib/googleSheetSync.js';
 
 const html = htm.bind(h);
 
@@ -35,13 +36,36 @@ const App = () => {
     const [loginPassword, setLoginPassword] = useState('');
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isGoogleSyncing, setIsGoogleSyncing] = useState(false);
+    const [googleSyncStatus, setGoogleSyncStatus] = useState('');
+    const [deviceId, setDeviceId] = useState('');
+
+    // Generate a unique device identifier for this browser session
+    useEffect(() => {
+        // Get or create the device identifier based on current login state
+        let storedUsername = localStorage.getItem('et_login_username');
+        let username = loginUsername || storedUsername || 'guest';
+        const userRole = isAdmin ? 'admin' : 'teacher';
+        const browserInfo = /Firefox|Safari|Chrome|Edge/.exec(navigator.userAgent)?.[0] || 'Browser';
+        const newDeviceId = `${userRole}@${username}-${browserInfo}`;
+        
+        setDeviceId(newDeviceId);
+    }, [loginUsername, isAdmin]);
+
+    // Initialize login state from localStorage on app load
+    useEffect(() => {
+        const storedUsername = localStorage.getItem('et_login_username');
+        if (storedUsername) {
+            setLoginUsername(storedUsername);
+        }
+    }, []);
 
     useEffect(() => {
         Storage.save(data);
     }, [data]);
 
     useEffect(() => {
-        const ws = window.websim || websim;
+        const ws = window.websim;
         if (!ws) return;
 
         const initCloudSync = async () => {
@@ -92,6 +116,44 @@ const App = () => {
         return () => window.removeEventListener('edutrack:restore', handler);
     }, []);
 
+    // Track user activity - update active status periodically
+    useEffect(() => {
+        if (!data?.settings?.googleScriptUrl || !deviceId) return;
+        if (deviceId.includes('guest')) return;
+
+        const trackUserActivity = async () => {
+            try {
+                googleSheetSync.setSettings(data.settings);
+                await googleSheetSync.setActiveUser(deviceId);
+            } catch (error) {
+                console.warn('Activity tracking error:', error);
+            }
+        };
+
+        // Track immediately
+        trackUserActivity();
+
+        // Track every 2 minutes
+        const interval = setInterval(trackUserActivity, 2 * 60 * 1000);
+
+        // Also track on user interaction (throttled)
+        let interactionTimeout;
+        const handleInteraction = () => {
+            clearTimeout(interactionTimeout);
+            interactionTimeout = setTimeout(trackUserActivity, 500); // Throttle to once every 500ms
+        };
+        window.addEventListener('click', handleInteraction);
+        window.addEventListener('keydown', handleInteraction);
+
+        return () => {
+            clearInterval(interval);
+            clearTimeout(interactionTimeout);
+            window.removeEventListener('click', handleInteraction);
+            window.removeEventListener('keydown', handleInteraction);
+        };
+    }, [data?.settings?.googleScriptUrl, deviceId]);
+
+
     const handleCloudPush = async () => {
         const ws = window.websim || websim;
         if (!ws) {
@@ -105,6 +167,215 @@ const App = () => {
         }
         setIsSyncing(false);
     };
+
+    // helper pushed inside component scope
+    const pushLocalToGoogle = useCallback(async (sheetData) => {
+        console.log('📤 pushLocalToGoogle OPTIMIZED - called with', sheetData?.students?.length, 'sheet students');
+        if (!sheetData || !sheetData.success) return;
+
+        // Create efficient maps for comparison
+        const sheetStudents = sheetData.students || [];
+        const sheetMap = new Map(sheetStudents.map(s => {
+            const cleaned = { ...s, selectedFees: Storage.parseSelectedFees(s.selectedFees) };
+            return [s.admissionNo?.trim() || '', cleaned];
+        }));
+        
+        const sheetAssess = sheetData.assessments || [];
+        const assessMap = new Map(sheetAssess.map(a => 
+            [`${a.studentId}-${a.subject}-${a.term}-${a.examType}-${a.academicYear}`, a]
+        ));
+        
+        const sheetAtt = sheetData.attendance || [];
+        const attMap = new Map(sheetAtt.map(a => [`${a.studentId}-${a.date}`, a]));
+
+        // Identify ALL changes first
+        const studentsToSync = [];
+        const assessmentsToSync = [];
+        const attendanceToSync = [];
+
+        for (const s of (data.students || [])) {
+            const admNo = s.admissionNo?.trim() || '';
+            const remote = sheetMap.get(admNo);
+            if (!remote || JSON.stringify(s) !== JSON.stringify({...remote, id: s.id})) {
+                studentsToSync.push(s);
+            }
+        }
+
+        for (const a of (data.assessments || [])) {
+            const key = `${a.studentId}-${a.subject}-${a.term}-${a.examType}-${a.academicYear}`;
+            const remote = assessMap.get(key);
+            if (!remote || JSON.stringify(a) !== JSON.stringify(remote)) {
+                assessmentsToSync.push(a);
+            }
+        }
+
+        for (const a of (data.attendance || [])) {
+            const key = `${a.studentId}-${a.date}`;
+            const remote = attMap.get(key);
+            if (!remote || JSON.stringify(a) !== JSON.stringify(remote)) {
+                attendanceToSync.push(a);
+            }
+        }
+
+        // Push ALL in parallel using bulk operations
+        const syncPromises = [];
+        
+        if (studentsToSync.length > 0) {
+            syncPromises.push(googleSheetSync.bulkPushStudents(studentsToSync).catch(e => console.error('Student sync error:', e)));
+        }
+        
+        if (assessmentsToSync.length > 0) {
+            syncPromises.push(googleSheetSync.bulkPushAssessments(assessmentsToSync).catch(e => console.error('Assessment sync error:', e)));
+        }
+        
+        if (attendanceToSync.length > 0) {
+            syncPromises.push(googleSheetSync.bulkPushAttendance(attendanceToSync).catch(e => console.error('Attendance sync error:', e)));
+        }
+
+        if (syncPromises.length > 0) {
+            await Promise.all(syncPromises);
+        }
+        
+        console.log('   ✅ Parallel bulk sync completed');
+    }, [data, googleSheetSync]);
+
+    const handleGoogleSync = useCallback(async () => {
+        if (!data.settings.googleScriptUrl) {
+            alert("Google Sheet not configured. Go to Settings > Google Sheet Sync to configure.");
+            return;
+        }
+        
+        setIsGoogleSyncing(true);
+        setGoogleSyncStatus('Syncing with Google Sheet...');
+        
+        googleSheetSync.setSettings(data.settings);
+        
+        try {
+            // Fetch ALL data from Google Sheet
+            let result = await googleSheetSync.fetchAll();
+            
+            if (result.success) {
+                console.log('Google data raw - students:', result.students?.length, 'assessments:', result.assessments?.length);
+
+                // send any local entries that don't exist yet on sheet
+                try {
+                    console.log('📤 Pushing local data to Google...');
+                    await pushLocalToGoogle(result);
+                    console.log('✅ Push to Google completed');
+                } catch (pushError) {
+                    console.error('❌ Error pushing to Google:', pushError);
+                    // Don't stop sync, continue with pull
+                }
+
+                // after pushing, re-fetch to get updated sheet state
+                result = await googleSheetSync.fetchAll();
+
+                // Replace local data with Google data (clean sync, no duplicates)
+                console.log('🔄 Before replaceWithGoogleData - calling with:', {
+                    localStudents: data.students?.length,
+                    googleStudents: result.students?.length,
+                    googleAssessments: result.assessments?.length
+                });
+                
+                try {
+                    const merged = Storage.replaceWithGoogleData(data, {
+                        students: result.students || [],
+                        assessments: result.assessments || [],
+                        attendance: result.attendance || []
+                    });
+                    
+                    console.log('✅ After replaceWithGoogleData - merged students:', merged?.students?.length);
+                    console.log('📢 Calling setData with merged data, students:', merged?.students?.length);
+                    setData(merged);
+                    setGoogleSyncStatus(`✓ Synced! ${merged.students?.length || 0} students, ${result.assessments?.length || 0} marks from Google`);
+                    setTimeout(() => setGoogleSyncStatus(''), 5000);
+                } catch (mergeError) {
+                    console.error('❌ Error merging data:', mergeError);
+                    alert("Data merge failed: " + mergeError.message);
+                    setGoogleSyncStatus('');
+                }
+            } else {
+                alert("Sync failed: " + result.error);
+                setGoogleSyncStatus('');
+            }
+        } catch (error) {
+            alert("Sync error: " + error.message);
+            setGoogleSyncStatus('');
+        }
+        
+        setIsGoogleSyncing(false);
+    }, [data, setData, googleSheetSync, pushLocalToGoogle]);
+
+    // when the browser regains connectivity, automatically sync with Google
+    useEffect(() => {
+        const onOnline = () => {
+            if (data.settings?.googleScriptUrl) {
+                handleGoogleSync();
+            }
+        };
+        window.addEventListener('online', onOnline);
+        return () => window.removeEventListener('online', onOnline);
+    }, [data.settings?.googleScriptUrl, handleGoogleSync]);
+
+    // periodic sync every 5 minutes if configured and online
+    useEffect(() => {
+        if (!data.settings?.googleScriptUrl) return;
+        const interval = setInterval(() => {
+            if (navigator.onLine) {
+                handleGoogleSync();
+            }
+        }, 5 * 60 * 1000); // 5 minutes
+        return () => clearInterval(interval);
+    }, [data.settings?.googleScriptUrl, handleGoogleSync]);
+
+    // Auto-sync on app load if Google Sheet configured
+    useEffect(() => {
+        if (!data || !data.settings?.googleScriptUrl) return;
+        
+        // Auto-pull from Google on load (silent sync)
+        const autoSync = async () => {
+            setGoogleSyncStatus('Loading from Google...');
+            googleSheetSync.setSettings(data.settings);
+            try {
+                let result = await googleSheetSync.fetchAll();
+                
+                if (result.success && (result.students?.length > 0 || result.assessments?.length > 0)) {
+                    // Push any pending local records first
+                    try {
+                        await pushLocalToGoogle(result);
+                    } catch (pushError) {
+                        console.warn('Push to Google failed, continuing with pull:', pushError.message);
+                    }
+                    
+                    // Refetch after pushing
+                    result = await googleSheetSync.fetchAll();
+                    
+                    // Replace local data with Google data (clean sync)
+                    try {
+                        const merged = Storage.replaceWithGoogleData(data, {
+                            students: result.students,
+                            assessments: result.assessments,
+                            attendance: result.attendance
+                        });
+                        
+                        setData(merged);
+                        setGoogleSyncStatus(`✓ Loaded ${merged.students?.length || 0} students, ${result.assessments?.length || 0} marks`);
+                    } catch (mergeError) {
+                        console.error('Error merging data:', mergeError);
+                        setGoogleSyncStatus('');
+                    }
+                } else {
+                    setGoogleSyncStatus('');
+                }
+            } catch (e) {
+                console.warn('Auto-sync skipped:', e.message);
+                setGoogleSyncStatus('');
+            }
+        };
+        
+        // Delay slightly to let app initialize
+        setTimeout(autoSync, 3000);
+    }, [data?.settings?.googleScriptUrl]);
 
     useEffect(() => {
         if (!data || !data.settings) return;
@@ -127,9 +398,9 @@ const App = () => {
         if (loginUsername === 'admin' && loginPassword === 'admin002') {
             setIsAdmin(true);
             localStorage.setItem('et_is_admin', 'true');
+            localStorage.setItem('et_login_username', loginUsername); // Store the logged-in username
             setShowLoginModal(false);
-            setLoginUsername('');
-            setLoginPassword('');
+            setLoginPassword(''); // Only clear password, keep username for device ID
         } else {
             alert('Invalid Admin Credentials');
         }
@@ -137,7 +408,9 @@ const App = () => {
 
     const handleLogout = () => {
         setIsAdmin(false);
+        setLoginUsername(''); // Clear the username
         localStorage.removeItem('et_is_admin');
+        localStorage.removeItem('et_login_username'); // Remove stored login
         setView('dashboard');
     };
 
@@ -224,22 +497,48 @@ const App = () => {
 
     const renderView = () => {
         switch (view) {
-            case 'dashboard': return html`<${Dashboard} data=${data} />`;
+            case 'dashboard': return html`<${Dashboard} data=${data} googleSyncStatus=${googleSyncStatus} />`;
             case 'batch-reports': {
                 const [batchTerm, setBatchTerm] = useState('T1');
-                const grade = selectedStudent?.grade || 'GRADE 1';
-                const gradeStudents = data.students.filter(s => s.grade === grade);
+                const [batchGrade, setBatchGrade] = useState(selectedStudent?.grade || 'GRADE 1');
+                const [batchStream, setBatchStream] = useState(selectedStudent?.stream || 'ALL');
+                const streams = data.settings.streams || [];
+                
+                const gradeStudents = (data.students || []).filter(s => {
+                    if (s.grade !== batchGrade) return false;
+                    if (batchStream === 'ALL') return true;
+                    return s.stream === batchStream;
+                });
+                
+                const gradeLabel = batchGrade + (batchStream !== 'ALL' ? batchStream : '');
                 return html`
                     <div class="space-y-8">
                         <div class="flex justify-between items-center no-print bg-white p-4 rounded-xl border mb-6">
                             <button onClick=${() => setView('result-analysis')} class="text-blue-600 font-bold flex items-center gap-1">
                                 <span>←</span> Back to Analysis
                             </button>
-                            <div class="text-center">
-                                <h2 class="font-black">Batch Printing: ${grade}</h2>
-                                <p class="text-[10px] text-slate-500 uppercase font-bold">${gradeStudents.length} Reports Ready</p>
+                            <div class="flex items-center gap-4">
+                                <div class="flex flex-col items-center">
+                                    <h2 class="font-black">Batch Printing: ${gradeLabel}</h2>
+                                    <p class="text-[10px] text-slate-500 uppercase font-bold">${gradeStudents.length} Reports Ready</p>
+                                </div>
                             </div>
                             <div class="flex gap-2">
+                                <select 
+                                    value=${batchGrade}
+                                    onChange=${(e) => { setBatchGrade(e.target.value); setBatchStream('ALL'); }}
+                                    class="px-3 py-2 border rounded-lg text-sm font-medium"
+                                >
+                                    ${data.settings.grades.map(g => html`<option value=${g}>${g}</option>`)}
+                                </select>
+                                <select 
+                                    value=${batchStream}
+                                    onChange=${(e) => setBatchStream(e.target.value)}
+                                    class="px-3 py-2 border rounded-lg text-sm font-medium"
+                                >
+                                    <option value="ALL">All Streams</option>
+                                    ${streams.map(s => html`<option value=${s}>${s}</option>`)}
+                                </select>
                                 <select 
                                     value=${batchTerm}
                                     onChange=${(e) => setBatchTerm(e.target.value)}
@@ -307,7 +606,7 @@ const App = () => {
             case 'archives': return html`<${Archives} data=${data} />`;
             case 'settings': return html`<${Settings} data=${data} setData=${setData} />`;
             case 'student-detail': return html`<${StudentDetail} student=${selectedStudent} data=${data} setData=${setData} onBack=${() => setView('students')} />`;
-            default: return html`<${Dashboard} data=${data} />`;
+            default: return html`<${Dashboard} data=${data} googleSyncStatus=${googleSyncStatus} />`;
         }
     };
 
@@ -368,6 +667,26 @@ const App = () => {
                     >
                         <span class=${isSyncing ? 'animate-spin' : ''}>${isSyncing ? '⏳' : '☁️'}</span>
                         <span class="hidden sm:inline">${isSyncing ? 'Syncing...' : 'Cloud Sync'}</span>
+                    </button>
+
+                    <button 
+                        onClick=${() => {
+                            if (!data.settings.googleScriptUrl) {
+                                alert("Google Sheet not configured. Go to Settings > Teacher Data Sync.");
+                                return;
+                            }
+                            handleGoogleSync();
+                        }}
+                        disabled=${isGoogleSyncing}
+                        class=${`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all border ${isGoogleSyncing
+            ? 'bg-green-50 border-green-200 text-green-600 animate-pulse'
+            : googleSyncStatus?.includes('✓')
+                ? 'bg-green-100 border-green-300 text-green-700'
+                : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-green-500 hover:text-green-600'
+        }`}
+                    >
+                        <span class=${isGoogleSyncing ? 'animate-spin' : ''}>${isGoogleSyncing ? '⏳' : '📥'}</span>
+                        <span class="hidden sm:inline">${googleSyncStatus || 'Get from Sheet'}</span>
                     </button>
 
                     <div class="h-8 w-px bg-slate-100 mx-1 hidden sm:block"></div>
@@ -459,10 +778,11 @@ const StudentDetail = ({ student, data, setData, onBack, isBatch = false, initia
     const isFullYear = selectedTerm === 'FULL';
 
     const getAssessmentsForTerm = (term) => {
+        const academicYear = data.settings.academicYear || settings.academicYear;
         if (term === 'FULL') {
-            return data.assessments.filter(a => a.studentId === student.id);
+            return data.assessments.filter(a => a.studentId === student.id && a.academicYear === academicYear);
         }
-        return data.assessments.filter(a => a.studentId === student.id && a.term === term);
+        return data.assessments.filter(a => a.studentId === student.id && a.term === term && a.academicYear === academicYear);
     };
 
     const assessments = getAssessmentsForTerm(selectedTerm);
@@ -472,7 +792,9 @@ const StudentDetail = ({ student, data, setData, onBack, isBatch = false, initia
     const subjectAverages = subjects.map(subject => {
         const scores = examTypes.map(type => {
             const match = assessments.find(a => a.subject === subject && a.examType === type);
-            return match ? Number(match.score) : null;
+            if (!match) return null;
+            const score = Number(match.score);
+            return isNaN(score) ? null : score;
         }).filter(s => s !== null);
         return scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
     });
@@ -486,9 +808,10 @@ const StudentDetail = ({ student, data, setData, onBack, isBatch = false, initia
         : Storage.getStudentAttendance(student.id, data.attendance || [], selectedTerm);
 
     const getYearSummary = () => {
+        const academicYear = data.settings.academicYear || settings.academicYear;
         const terms = ['T1', 'T2', 'T3'];
         return terms.map(term => {
-            const termAssessments = data.assessments.filter(a => a.studentId === student.id && a.term === term);
+            const termAssessments = data.assessments.filter(a => a.studentId === student.id && a.term === term && a.academicYear === academicYear);
             const termSubjects = subjects.map(subject => {
                 const scores = examTypes.map(type => {
                     const match = termAssessments.find(a => a.subject === subject && a.examType === type);
@@ -525,12 +848,20 @@ const StudentDetail = ({ student, data, setData, onBack, isBatch = false, initia
     const feeKeys = ['t1', 't2', 't3', 'breakfast', 'lunch', 'trip', 'bookFund', 'caution', 'uniform', 'studentCard', 'remedial'];
 
     // Calculate total due based ONLY on student's selected payable items
-    const selectedKeys = student.selectedFees || ['t1', 't2', 't3'];
+    let selectedKeys;
+    if (typeof student.selectedFees === 'string') {
+        selectedKeys = student.selectedFees.split(',').map(f => f.trim()).filter(f => f);
+    } else if (Array.isArray(student.selectedFees)) {
+        selectedKeys = student.selectedFees;
+    } else {
+        selectedKeys = ['t1', 't2', 't3'];
+    }
     const totalDue = feeStructure ? selectedKeys.reduce((sum, key) => sum + (feeStructure[key] || 0), 0) : 0;
     const balance = totalDue - totalPaid;
 
     const remark = (data.remarks || []).find(r => r.studentId === student.id) || { teacher: '', principal: '' };
-    const classTeacher = (data.teachers || []).find(t => t.isClassTeacher && t.classTeacherGrade === student.grade);
+    const studentGradeWithStream = student.grade + (student.stream || '');
+    const classTeacher = (data.teachers || []).find(t => t.isClassTeacher && t.classTeacherGrade === studentGradeWithStream);
 
     const handleRemarkChange = (field, val) => {
         const otherRemarks = (data.remarks || []).filter(r => r.studentId !== student.id);
@@ -543,7 +874,7 @@ const StudentDetail = ({ student, data, setData, onBack, isBatch = false, initia
     return html`
         <div class="space-y-4 print:space-y-2">
             ${!isBatch && html`
-                <button onClick=${onBack} class="text-blue-600 flex items-center gap-1 no-print">
+                <button type="button" onClick=${onBack} class="text-blue-600 flex items-center gap-1 no-print">
                     <span class="text-xl">←</span> Back to Students
                 </button>
             `}
@@ -564,11 +895,7 @@ const StudentDetail = ({ student, data, setData, onBack, isBatch = false, initia
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1 text-slate-500 text-[10px]">
                             <div>
                                 <p class="text-[9px] font-bold text-slate-400 uppercase">Grade / Class</p>
-                                <p class="font-bold text-slate-900">${student.grade}</p>
-                            </div>
-                            <div>
-                                <p class="text-[9px] font-bold text-slate-400 uppercase">Stream / House</p>
-                                <p class="font-bold text-slate-900">${student.stream || 'N/A'}</p>
+                                <p class="font-bold text-slate-900">${student.grade}${student.stream ? student.stream : ''}</p>
                             </div>
                             <div>
                                 <p class="text-[9px] font-bold text-slate-400 uppercase">Admission No.</p>
@@ -672,15 +999,21 @@ const StudentDetail = ({ student, data, setData, onBack, isBatch = false, initia
                                 </thead>
                                 <tbody class="divide-y print:divide-black">
                                     ${subjects.map(subject => {
-                const t1Assessments = data.assessments.filter(a => a.studentId === student.id && a.term === 'T1' && a.subject === subject);
-                const t2Assessments = data.assessments.filter(a => a.studentId === student.id && a.term === 'T2' && a.subject === subject);
-                const t3Assessments = data.assessments.filter(a => a.studentId === student.id && a.term === 'T3' && a.subject === subject);
+                const academicYear = data.settings.academicYear || settings.academicYear;
+                const t1Assessments = data.assessments.filter(a => a.studentId === student.id && a.term === 'T1' && a.subject === subject && a.academicYear === academicYear);
+                const t2Assessments = data.assessments.filter(a => a.studentId === student.id && a.term === 'T2' && a.subject === subject && a.academicYear === academicYear);
+                const t3Assessments = data.assessments.filter(a => a.studentId === student.id && a.term === 'T3' && a.subject === subject && a.academicYear === academicYear);
 
                 const getScores = (termAssessments) => {
                     const scores = {};
                     examTypes.forEach(type => {
                         const match = termAssessments.find(a => a.examType === type);
-                        scores[type] = match ? Number(match.score) : null;
+                        if (match) {
+                            const score = Number(match.score);
+                            scores[type] = isNaN(score) ? null : score;
+                        } else {
+                            scores[type] = null;
+                        }
                     });
                     const valid = Object.values(scores).filter(s => s !== null);
                     return {

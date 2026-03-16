@@ -8,9 +8,13 @@ const html = htm.bind(h);
 export const ResultAnalysis = ({ data, onSelectStudent }) => {
     const [filterTerm, setFilterTerm] = useState('T1');
     const [filterGrade, setFilterGrade] = useState('GRADE 1');
+    const [filterStream, setFilterStream] = useState('ALL');
     const [filterSubject, setFilterSubject] = useState('ALL');
     const [filterYear, setFilterYear] = useState(data.settings.academicYear || '2025/2026');
     const [searchName, setSearchName] = useState('');
+
+    const streams = data?.settings?.streams || [];
+    const gradeStreamOptions = streams.length > 0 ? streams : [];
 
     // Keep filterYear in sync with the active school setting so changing Academic Year applies immediately
     useEffect(() => {
@@ -19,28 +23,40 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
         }
     }, [data?.settings?.academicYear]);
 
-    const students = (data.students || []).filter(s => s.grade === filterGrade);
+    const students = (data.students || []).filter(s => {
+        if (s.grade !== filterGrade) return false;
+        if (filterStream === 'ALL') return true;
+        return s.stream === filterStream;
+    });
     const assessments = data.assessments || [];
     const subjects = Storage.getSubjectsForGrade(filterGrade);
     const examTypes = ['Opener', 'Mid-Term', 'End-Term'];
 
     const analysisData = useMemo(() => {
+        const terms = filterTerm === 'FULL' ? ['T1', 'T2', 'T3'] : [filterTerm];
+
         return students.map(student => {
-            const studentAssessments = assessments.filter(a => 
-                a.studentId === student.id && 
-                a.term === filterTerm &&
+            const studentAssessments = assessments.filter(a =>
+                a.studentId === student.id &&
+                terms.includes(a.term) &&
                 a.academicYear === filterYear
             );
 
             const subjectAnalysis = subjects.map(subject => {
                 const scores = {};
                 examTypes.forEach(type => {
-                    const match = studentAssessments.find(a => a.subject === subject && a.examType === type);
-                    scores[type] = match ? Number(match.score) : null;
+                    const matches = studentAssessments.filter(a => a.subject === subject && a.examType === type);
+                    const avgScore = matches.length > 0
+                        ? Math.round(matches.reduce((sum, m) => {
+                            const score = Number(m.score);
+                            return sum + (isNaN(score) ? 0 : score);
+                        }, 0) / matches.length)
+                        : null;
+                    scores[type] = avgScore;
                 });
 
                 const validScores = Object.values(scores).filter(s => s !== null);
-                const average = validScores.length > 0 
+                const average = validScores.length > 0
                     ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
                     : null;
 
@@ -64,6 +80,7 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
     }, [students, assessments, filterTerm, filterGrade, searchName]);
 
     const classSubjectAnalysis = useMemo(() => {
+        const showTermBreakdown = filterTerm !== 'FULL';
         return subjects.map(subject => {
             let openerSum = 0, midSum = 0, endSum = 0, avgSum = 0;
             let oCount = 0, mCount = 0, eCount = 0, aCount = 0;
@@ -71,21 +88,23 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
             analysisData.forEach(student => {
                 const sa = student.subjectAnalysis.find(s => s.subject === subject);
                 if (sa) {
-                    if (sa.scores['Opener'] !== null) { openerSum += sa.scores['Opener']; oCount++; }
-                    if (sa.scores['Mid-Term'] !== null) { midSum += sa.scores['Mid-Term']; mCount++; }
-                    if (sa.scores['End-Term'] !== null) { endSum += sa.scores['End-Term']; eCount++; }
+                    if (showTermBreakdown) {
+                        if (sa.scores['Opener'] !== null) { openerSum += sa.scores['Opener']; oCount++; }
+                        if (sa.scores['Mid-Term'] !== null) { midSum += sa.scores['Mid-Term']; mCount++; }
+                        if (sa.scores['End-Term'] !== null) { endSum += sa.scores['End-Term']; eCount++; }
+                    }
                     if (sa.average !== null) { avgSum += sa.average; aCount++; }
                 }
             });
 
             return {
-                opener: oCount > 0 ? Math.round(openerSum / oCount) : '-',
-                mid: mCount > 0 ? Math.round(midSum / mCount) : '-',
-                end: eCount > 0 ? Math.round(endSum / eCount) : '-',
+                opener: showTermBreakdown && oCount > 0 ? Math.round(openerSum / oCount) : '-',
+                mid: showTermBreakdown && mCount > 0 ? Math.round(midSum / mCount) : '-',
+                end: showTermBreakdown && eCount > 0 ? Math.round(endSum / eCount) : '-',
                 avg: aCount > 0 ? Math.round(avgSum / aCount) : '-'
             };
         });
-    }, [analysisData, subjects]);
+    }, [analysisData, subjects, filterTerm]);
 
     const topTen = useMemo(() => {
         const sorted = [...analysisData].sort((a, b) => {
@@ -97,10 +116,20 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                 return bSub - aSub;
             }
         });
-        return sorted.slice(0, 10).filter(s => {
-            if (filterSubject === 'ALL') return s.overallAverage > 0;
-            return (s.subjectAnalysis.find(sub => sub.subject === filterSubject)?.average || 0) > 0;
-        });
+
+        // Deduplicate by student ID to ensure each student appears only once
+        const seen = new Set();
+        return sorted.filter(s => {
+            const isValid = filterSubject === 'ALL'
+                ? s.overallAverage > 0
+                : (s.subjectAnalysis.find(sub => sub.subject === filterSubject)?.average || 0) > 0;
+
+            if (!isValid) return false;
+            if (seen.has(s.id)) return false;
+
+            seen.add(s.id);
+            return true;
+        }).slice(0, 10);
     }, [analysisData, filterSubject]);
 
     return html`
@@ -132,12 +161,12 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                         onChange=${e => setFilterYear(e.target.value)}
                     >
                         ${(() => {
-                            const baseYear = Number((data.settings?.academicYear || '2025/2026').split('/')[0]);
-                            const startYear = isNaN(baseYear) ? 2025 : baseYear - 2;
-                            return Array.from({ length: 7 }, (_, i) => startYear + i).map(y => html`
-                                <option value="${y}/${y+1}">${y}/${y+1}</option>
+            const baseYear = Number((data.settings?.academicYear || '2025/2026').split('/')[0]);
+            const startYear = isNaN(baseYear) ? 2025 : baseYear - 2;
+            return Array.from({ length: 7 }, (_, i) => startYear + i).map(y => html`
+                                <option value="${y}/${y + 1}">${y}/${y + 1}</option>
                             `);
-                        })()}
+        })()}
                     </select>
                 </div>
                 <div class="space-y-1">
@@ -150,6 +179,7 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                         <option value="T1">Term 1</option>
                         <option value="T2">Term 2</option>
                         <option value="T3">Term 3</option>
+                        <option value="FULL">Full Year</option>
                     </select>
                 </div>
                 <div class="space-y-1">
@@ -160,6 +190,17 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                         onChange=${e => { setFilterGrade(e.target.value); setFilterSubject('ALL'); }}
                     >
                         ${data.settings.grades.map(g => html`<option value=${g}>${g}</option>`)}
+                    </select>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Stream</label>
+                    <select 
+                        class="w-full p-2 bg-slate-50 rounded-lg text-xs font-bold outline-none"
+                        value=${filterStream}
+                        onChange=${e => setFilterStream(e.target.value)}
+                    >
+                        <option value="ALL">All Streams</option>
+                        ${gradeStreamOptions.map(s => html`<option value=${s}>${s}</option>`)}
                     </select>
                 </div>
                 <div class="space-y-1">
@@ -185,23 +226,35 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                 </div>
             </div>
 
-            <!-- Top 10 Best Students -->
-            <div class="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-2xl text-white shadow-xl">
+            <!-- Analysis Print Header - appears first on page 1 -->
+            <div class="print-only mb-6 flex flex-col items-center text-center">
+                <img src="${data.settings.schoolLogo}" class="w-16 h-16 mb-2 object-contain" />
+                <h1 class="text-2xl font-black uppercase">${data.settings.schoolName}</h1>
+                <h2 class="text-sm font-bold uppercase text-slate-500 mt-1">Academic Performance Analysis - ${filterTerm === 'FULL' ? 'Full Year' : filterTerm} (${filterGrade})</h2>
+                <div class="mt-4 grid grid-cols-3 w-full border-y border-slate-200 py-2 text-[10px] font-bold uppercase">
+                    <span>Date: ${new Date().toLocaleDateString()}</span>
+                    <span>Students: ${analysisData.length}</span>
+                    <span>Academic Year: ${filterYear}</span>
+                </div>
+            </div>
+
+            <!-- Top 10 Best Students - Screen Only -->
+            <div class="no-print bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-2xl text-white shadow-xl">
                 <div class="flex items-center gap-3 mb-6">
                     <span class="text-3xl">🏆</span>
                     <div>
                         <h3 class="font-black text-lg uppercase leading-tight">Top Performers</h3>
                         <p class="text-[10px] text-blue-100 font-bold uppercase tracking-widest">
-                            ${filterSubject === 'ALL' ? 'Overall Class Ranking' : `${filterSubject} Excellence`} • ${filterGrade}
+                            ${filterSubject === 'ALL' ? 'Overall Class Ranking' : `${filterSubject} Excellence`} • ${filterGrade}${filterTerm === 'FULL' ? ' (Full Year)' : ''}
                         </p>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
                     ${topTen.map((s, idx) => {
-                        const score = filterSubject === 'ALL' 
-                            ? s.overallAverage 
-                            : (s.subjectAnalysis.find(sub => sub.subject === filterSubject)?.average || 0);
-                        return html`
+            const score = filterSubject === 'ALL'
+                ? s.overallAverage
+                : (s.subjectAnalysis.find(sub => sub.subject === filterSubject)?.average || 0);
+            return html`
                             <div class="bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/10 flex items-center gap-3 relative overflow-hidden group">
                                 <span class="text-2xl font-black text-white/20 absolute -right-2 -bottom-2 group-hover:scale-110 transition-transform">${idx + 1}</span>
                                 <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-black text-xs shrink-0">${idx + 1}</div>
@@ -211,29 +264,59 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                                 </div>
                             </div>
                         `;
-                    })}
+        })}
                     ${topTen.length === 0 && html`<p class="col-span-full text-center py-4 text-sm text-blue-200 opacity-60 italic">No ranking data available for current selection.</p>`}
                 </div>
             </div>
 
-            <!-- Analysis Print Header -->
-            <div class="print-only mb-6 flex flex-col items-center text-center">
-                <img src="${data.settings.schoolLogo}" class="w-16 h-16 mb-2 object-contain" />
-                <h1 class="text-2xl font-black uppercase">${data.settings.schoolName}</h1>
-                <h2 class="text-sm font-bold uppercase text-slate-500 mt-1">Termly Academic Performance Analysis - ${filterTerm} (${filterGrade})</h2>
-                <div class="mt-4 grid grid-cols-3 w-full border-y border-slate-200 py-2 text-[10px] font-bold uppercase">
-                    <span>Date: ${new Date().toLocaleDateString()}</span>
-                    <span>Students: ${analysisData.length}</span>
-                    <span>Academic Year: ${filterYear}</span>
+            <!-- Top Performers - Print Section -->
+            <div class="print-only mb-8 border-4 border-blue-700 p-6 bg-blue-50">
+                <div class="text-center mb-6 pb-4 border-b-2 border-blue-700">
+                    <h2 class="text-2xl font-black uppercase text-blue-900 mb-1">🏆 TOP PERFORMERS 🏆</h2>
+                    <p class="text-sm font-bold text-blue-700 uppercase tracking-widest">
+                        ${filterSubject === 'ALL' ? 'Overall Class Ranking' : `${filterSubject} Excellence`} - ${filterGrade}
+                    </p>
+                    <p class="text-xs text-blue-600 mt-1">Academic Term: ${filterTerm === 'FULL' ? 'Full Year' : filterTerm} (${filterYear})</p>
+                </div>
+                <div class="grid grid-cols-1 gap-3">
+                    ${topTen.map((s, idx) => {
+            const score = filterSubject === 'ALL'
+                ? s.overallAverage
+                : (s.subjectAnalysis.find(sub => sub.subject === filterSubject)?.average || 0);
+            const medalEmoji = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '⭐';
+            const bgColor = idx < 3 ? (idx === 0 ? 'bg-yellow-100 border-yellow-500' : idx === 1 ? 'bg-gray-100 border-gray-500' : 'bg-orange-100 border-orange-500') : 'bg-blue-100 border-blue-400';
+            return html`
+                            <div class="border-l-4 ${bgColor} p-4 flex items-center justify-between font-bold">
+                                <div class="flex items-center gap-4">
+                                    <span class="text-3xl">${medalEmoji}</span>
+                                    <div>
+                                        <p class="text-lg font-black text-blue-900">Position #${idx + 1}</p>
+                                        <p class="text-sm text-blue-700">${s.name}</p>
+                                        <p class="text-xs text-blue-600">Admission No: ${s.admissionNo || 'N/A'}</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-3xl font-black text-blue-900">${score}%</p>
+                                    <p class="text-xs font-bold uppercase text-blue-600">Score</p>
+                                </div>
+                            </div>
+                        `;
+        })}
+                    ${topTen.length === 0 && html`<p class="text-center py-6 text-blue-600 italic font-bold">No ranking data available for current selection.</p>`}
                 </div>
             </div>
 
+            <!-- Analysis Table Sub-Header (page break before detailed table) -->
+            <div class="print-only page-break mb-4 text-center">
+                <h2 class="text-sm font-bold uppercase text-slate-600">Detailed Student Score Table — ${filterGrade} | ${filterTerm === 'FULL' ? 'Full Year' : filterTerm} (${filterYear})</h2>
+            </div>
+
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
-                <table class="w-full text-left border-collapse min-w-[1000px]">
+                <table class="w-full text-left border-collapse min-w-[1000px] analysis-table">
                     <thead class="bg-slate-50 border-b border-slate-200">
                         <tr>
                             <th class="px-4 py-4 text-[10px] font-black text-slate-500 uppercase border-r sticky left-0 bg-slate-50 z-10">Student Name</th>
-                            ${subjects.filter(s => filterSubject === 'ALL' || s === filterSubject).map(s => html`
+                            ${filterTerm !== 'FULL' ? subjects.filter(s => filterSubject === 'ALL' || s === filterSubject).map(s => html`
                                 <th class="px-2 py-4 text-[9px] font-black text-slate-500 uppercase text-center border-r" colspan="1">
                                     <div class="truncate max-w-[150px] mx-auto">${s}</div>
                                     <div class="flex justify-between mt-1 px-1 font-normal text-[7px] text-slate-400">
@@ -242,6 +325,11 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                                         <span>End</span>
                                         <span class="font-bold text-primary">Avg</span>
                                     </div>
+                                </th>
+                            `) : subjects.filter(s => filterSubject === 'ALL' || s === filterSubject).map(s => html`
+                                <th class="px-2 py-4 text-[9px] font-black text-slate-500 uppercase text-center border-r">
+                                    <div class="truncate max-w-[150px] mx-auto">${s}</div>
+                                    <div class="mt-1 px-1 font-bold text-[7px] text-primary">Year Avg</div>
                                 </th>
                             `)}
                             <th class="px-4 py-4 text-[10px] font-black text-slate-900 uppercase text-right bg-slate-100">Overall Avg</th>
@@ -255,7 +343,7 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                                     ${student.name}
                                     <p class="text-[8px] text-slate-400 font-mono">${student.admissionNo}</p>
                                 </td>
-                                ${student.subjectAnalysis.filter(sa => filterSubject === 'ALL' || sa.subject === filterSubject).map(sa => html`
+                                ${filterTerm !== 'FULL' ? student.subjectAnalysis.filter(sa => filterSubject === 'ALL' || sa.subject === filterSubject).map(sa => html`
                                     <td class="px-1 py-3 border-r">
                                         <div class="flex justify-between items-center text-[9px] gap-1 px-1">
                                             <span class="text-slate-400 w-5 text-center">${sa.scores['Opener'] ?? '-'}</span>
@@ -264,16 +352,19 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                                             <span class="font-black text-primary w-6 text-center bg-blue-50 rounded">${sa.average ?? '-'}</span>
                                         </div>
                                     </td>
+                                `) : student.subjectAnalysis.filter(sa => filterSubject === 'ALL' || sa.subject === filterSubject).map(sa => html`
+                                    <td class="px-2 py-3 border-r text-center">
+                                        <span class="font-black text-primary text-xs bg-blue-50 px-2 py-1 rounded">${sa.average ?? '-'}</span>
+                                    </td>
                                 `)}
                                 <td class="px-4 py-3 text-right bg-slate-50/50">
                                     <div class="flex flex-col items-end">
                                         <span class="text-sm font-black text-slate-900">${student.overallAverage}%</span>
-                                        <span class="text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${
-                                            student.performance.level.startsWith('EE') ? 'bg-green-100 text-green-700' :
-                                            student.performance.level.startsWith('ME') ? 'bg-blue-100 text-blue-700' :
-                                            student.performance.level.startsWith('AE') ? 'bg-yellow-100 text-yellow-700' :
-                                            'bg-red-100 text-red-700'
-                                        }">${student.performance.level}</span>
+                                        <span class="text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${student.performance.level.startsWith('EE') ? 'bg-green-100 text-green-700' :
+                student.performance.level.startsWith('ME') ? 'bg-blue-100 text-blue-700' :
+                    student.performance.level.startsWith('AE') ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+            }">${student.performance.level}</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-3 text-center bg-slate-50/50 no-print">
@@ -290,7 +381,7 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                     <tfoot class="bg-slate-50 border-t-2 border-slate-200">
                         <tr class="font-black text-[10px] text-slate-700">
                             <td class="px-4 py-3 border-r sticky left-0 bg-slate-50 z-10 uppercase">Class Mean (Subject Analysis)</td>
-                            ${classSubjectAnalysis.map(ca => html`
+                            ${filterTerm !== 'FULL' ? classSubjectAnalysis.map(ca => html`
                                 <td class="px-1 py-3 border-r">
                                     <div class="flex justify-between items-center text-[9px] gap-1 px-1">
                                         <span class="text-slate-400 w-5 text-center">${ca.opener}</span>
@@ -299,11 +390,15 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                                         <span class="font-black text-primary w-6 text-center bg-blue-100 rounded">${ca.avg}</span>
                                     </div>
                                 </td>
+                            `) : classSubjectAnalysis.map(ca => html`
+                                <td class="px-2 py-3 border-r text-center">
+                                    <span class="font-black text-primary text-xs bg-blue-100 px-2 py-1 rounded">${ca.avg}</span>
+                                </td>
                             `)}
                             <td class="px-4 py-3 text-right bg-blue-600 text-white">
-                                ${analysisData.length > 0 
-                                    ? Math.round(analysisData.reduce((a, b) => a + b.overallAverage, 0) / analysisData.length)
-                                    : 0}%
+                                ${analysisData.length > 0
+            ? Math.round(analysisData.reduce((a, b) => a + b.overallAverage, 0) / analysisData.length)
+            : 0}%
                             </td>
                             <td class="no-print bg-slate-50"></td>
                         </tr>
@@ -312,7 +407,7 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                 ${analysisData.length === 0 && html`
                     <div class="p-20 text-center text-slate-300">
                         <p class="text-4xl mb-4">📉</p>
-                        <p class="font-bold">No results found for ${filterGrade} in ${filterTerm}</p>
+                        <p class="font-bold">No results found for ${filterGrade} in ${filterTerm === 'FULL' ? 'Full Year' : filterTerm}</p>
                         <p class="text-xs">Ensure you have entered marks in the Assessments module.</p>
                     </div>
                 `}
@@ -329,16 +424,16 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                         </h3>
                         <div class="space-y-5">
                             ${['EE', 'ME', 'AE', 'BE'].map(level => {
-                                const count = analysisData.filter(s => s.performance.level.startsWith(level)).length;
-                                const pct = analysisData.length > 0 ? (count / analysisData.length) * 100 : 0;
-                                const colors = { 
-                                    EE: 'bg-green-500 border-green-600', 
-                                    ME: 'bg-blue-500 border-blue-600', 
-                                    AE: 'bg-yellow-500 border-yellow-600', 
-                                    BE: 'bg-red-500 border-red-600' 
-                                };
-                                const labels = { EE: 'Exceeding', ME: 'Meeting', AE: 'Approaching', BE: 'Below' };
-                                return html`
+                const count = analysisData.filter(s => s.performance.level.startsWith(level)).length;
+                const pct = analysisData.length > 0 ? (count / analysisData.length) * 100 : 0;
+                const colors = {
+                    EE: 'bg-green-500 border-green-600',
+                    ME: 'bg-blue-500 border-blue-600',
+                    AE: 'bg-yellow-500 border-yellow-600',
+                    BE: 'bg-red-500 border-red-600'
+                };
+                const labels = { EE: 'Exceeding', ME: 'Meeting', AE: 'Approaching', BE: 'Below' };
+                return html`
                                     <div class="space-y-1.5">
                                         <div class="flex justify-between text-[10px] font-black uppercase">
                                             <span class="text-slate-500">${labels[level]} Expectations</span>
@@ -349,7 +444,7 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                                         </div>
                                     </div>
                                 `;
-                            })}
+            })}
                         </div>
                     </div>
 
@@ -357,11 +452,10 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                         <div class="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full blur-3xl print:hidden"></div>
                         <h3 class="text-blue-100 print:text-blue-600 font-black text-xs uppercase tracking-widest mb-1 relative z-10">Overall Class Mean</h3>
                         <div class="flex items-baseline gap-2 relative z-10">
-                            <p class="text-6xl font-black">${
-                                analysisData.length > 0 
-                                    ? Math.round(analysisData.reduce((a, b) => a + b.overallAverage, 0) / analysisData.length)
-                                    : 0
-                            }%</p>
+                            <p class="text-6xl font-black">${analysisData.length > 0
+            ? Math.round(analysisData.reduce((a, b) => a + b.overallAverage, 0) / analysisData.length)
+            : 0
+        }%</p>
                             <span class="text-blue-200 print:text-slate-400 font-bold uppercase text-xs">Competency Score</span>
                         </div>
                         <p class="text-blue-100 print:text-slate-500 text-[10px] leading-relaxed mt-4 max-w-xs relative z-10 italic">
@@ -378,11 +472,11 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                     </h3>
                     <div class="space-y-4">
                         ${subjects.map((subject, idx) => {
-                            const data = classSubjectAnalysis[idx];
-                            const avgVal = data.avg === '-' ? 0 : Number(data.avg);
-                            const barColor = avgVal >= 75 ? 'bg-green-500' : avgVal >= 50 ? 'bg-blue-500' : avgVal >= 35 ? 'bg-yellow-500' : 'bg-red-500';
-                            
-                            return html`
+            const data = classSubjectAnalysis[idx];
+            const avgVal = data.avg === '-' ? 0 : Number(data.avg);
+            const barColor = avgVal >= 75 ? 'bg-green-500' : avgVal >= 50 ? 'bg-blue-500' : avgVal >= 35 ? 'bg-yellow-500' : 'bg-red-500';
+
+            return html`
                                 <div class="grid grid-cols-12 items-center gap-4">
                                     <div class="col-span-3 text-[10px] font-black uppercase text-slate-600 truncate" title=${subject}>${subject}</div>
                                     <div class="col-span-8 flex items-center gap-3">
@@ -392,18 +486,17 @@ export const ResultAnalysis = ({ data, onSelectStudent }) => {
                                         <span class="w-10 text-[11px] font-black text-slate-900 text-right">${avgVal}%</span>
                                     </div>
                                     <div class="col-span-1 flex justify-end">
-                                        <span class=${`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${
-                                            avgVal >= 75 ? 'bg-green-100 text-green-700' : 
-                                            avgVal >= 50 ? 'bg-blue-100 text-blue-700' : 
-                                            avgVal >= 35 ? 'bg-yellow-100 text-yellow-700' : 
-                                            'bg-red-100 text-red-700'
-                                        }`}>
+                                        <span class=${`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${avgVal >= 75 ? 'bg-green-100 text-green-700' :
+                    avgVal >= 50 ? 'bg-blue-100 text-blue-700' :
+                        avgVal >= 35 ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                }`}>
                                             ${avgVal >= 75 ? 'EE' : avgVal >= 50 ? 'ME' : avgVal >= 35 ? 'AE' : 'BE'}
                                         </span>
                                     </div>
                                 </div>
                             `;
-                        })}
+        })}
                     </div>
                     <div class="mt-8 pt-4 border-t border-slate-100 flex justify-between text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                         <span>0%</span>

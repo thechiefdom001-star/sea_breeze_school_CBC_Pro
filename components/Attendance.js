@@ -2,6 +2,7 @@ import { h } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
 import htm from 'htm';
 import { Storage } from '../lib/storage.js';
+import { googleSheetSync } from '../lib/googleSheetSync.js';
 
 const html = htm.bind(h);
 
@@ -15,11 +16,18 @@ const getMonday = (date) => {
 
 export const Attendance = ({ data, setData }) => {
     const [selectedGrade, setSelectedGrade] = useState('GRADE 1');
+    const [selectedStream, setSelectedStream] = useState('ALL');
     const [selectedTerm, setSelectedTerm] = useState('T1');
     const [selectedWeek, setSelectedWeek] = useState(1);
     const [showPrintModal, setShowPrintModal] = useState(false);
 
-    const students = (data?.students || []).filter(s => s.grade === selectedGrade);
+    const streams = data?.settings?.streams || [];
+
+    const students = (data?.students || []).filter(s => {
+        if (s.grade !== selectedGrade) return false;
+        if (selectedStream === 'ALL') return true;
+        return s.stream === selectedStream;
+    });
     const weeksInTerm = Storage.getWeeksForTerm(data.settings, selectedTerm);
     const currentWeek = weeksInTerm[selectedWeek - 1] || { dates: [] };
 
@@ -64,6 +72,14 @@ export const Attendance = ({ data, setData }) => {
             ...data,
             attendance: [...otherRecords, newRecord]
         });
+
+        // attempt immediate push if sheet configured
+        if (data.settings.googleScriptUrl) {
+            googleSheetSync.setSettings(data.settings);
+            googleSheetSync.pushAttendance(newRecord).catch(err => {
+                console.warn('Attendance push failed:', err);
+            });
+        }
     };
 
     const markWeekAllPresent = () => {
@@ -106,7 +122,7 @@ export const Attendance = ({ data, setData }) => {
                 <div>
                     <h2 class="text-2xl font-black text-slate-800">Attendance Register</h2>
                     <p class="text-sm text-slate-500">
-                        ${selectedGrade} • ${selectedTerm} • Term Dates: ${getTermDatesForDisplay().start} to ${getTermDatesForDisplay().end}
+                        ${selectedGrade}${selectedStream !== 'ALL' ? selectedStream : ''} • ${selectedTerm} • Term Dates: ${getTermDatesForDisplay().start} to ${getTermDatesForDisplay().end}
                     </p>
                 </div>
                 <div class="flex gap-2">
@@ -120,7 +136,7 @@ export const Attendance = ({ data, setData }) => {
             </div>
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div>
                         <label class="text-xs font-bold text-slate-500 uppercase">Grade</label>
                         <select 
@@ -129,6 +145,17 @@ export const Attendance = ({ data, setData }) => {
                             class="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
                         >
                             ${data.settings.grades.map(grade => html`<option value=${grade}>${grade}</option>`)}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase">Stream</label>
+                        <select 
+                            value=${selectedStream}
+                            onChange=${(e) => setSelectedStream(e.target.value)}
+                            class="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                        >
+                            <option value="ALL">All Streams</option>
+                            ${streams.map(stream => html`<option value=${stream}>${stream}</option>`)}
                         </select>
                     </div>
                     <div>

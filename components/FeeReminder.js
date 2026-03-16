@@ -41,7 +41,13 @@ export const FeeReminder = ({ data }) => {
         const feeStructure = settings.feeStructures?.find(f => f.grade === student.grade);
         if (!feeStructure) return { items: [], totalDue: 0, totalPaid: 0, balance: 0, currentYearPaid: 0 };
 
-        const selectedKeys = student.selectedFees || ['t1', 't2', 't3'];
+        // Normalize selectedFees in case it's a string from Google Sheets
+        let selectedKeys = student.selectedFees;
+        if (typeof selectedKeys === 'string') {
+            selectedKeys = selectedKeys.split(',').map(f => f.trim()).filter(f => f);
+        } else if (!Array.isArray(selectedKeys)) {
+            selectedKeys = ['t1', 't2', 't3'];
+        }
         
         const itemized = feeColumns
             .filter(col => selectedKeys.includes(col.key))
@@ -264,6 +270,42 @@ export const FeeReminder = ({ data }) => {
                                     Please clear the outstanding balance of <b>${settings.currency} ${finance.balance.toLocaleString()}</b> as soon as possible to ensure 
                                     uninterrupted learning for the student. If payment has been made recently, kindly disregard this notice.
                                 </p>
+
+                                <!-- Payment Options -->
+                                ${(settings.bankName || settings.mpesaPaybill || settings.airtelPaybill) && html`
+                                    <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mt-4">
+                                        <p class="text-[9px] font-black uppercase text-slate-500 mb-2">Payment Options</p>
+                                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[9px]">
+                                            ${settings.bankName && html`
+                                                <div class="flex items-start gap-2">
+                                                    <span class="text-green-600">🏦</span>
+                                                    <div>
+                                                        <p class="font-bold text-slate-700">${settings.bankName}</p>
+                                                        <p class="text-slate-500">A/C No: ${settings.bankAccount || 'N/A'}</p>
+                                                    </div>
+                                                </div>
+                                            `}
+                                            ${settings.mpesaPaybill && html`
+                                                <div class="flex items-start gap-2">
+                                                    <span class="text-green-600">📱</span>
+                                                    <div>
+                                                        <p class="font-bold text-slate-700">M-Pesa Paybill</p>
+                                                        <p class="text-slate-500">${settings.mpesaPaybill} (A/C: ${settings.mpesaAccountName || 'School Fees'})</p>
+                                                    </div>
+                                                </div>
+                                            `}
+                                            ${settings.airtelPaybill && html`
+                                                <div class="flex items-start gap-2">
+                                                    <span class="text-red-600">📱</span>
+                                                    <div>
+                                                        <p class="font-bold text-slate-700">Airtel Money</p>
+                                                        <p class="text-slate-500">${settings.airtelPaybill} (A/C: ${settings.airtelAccountName || 'School Fees'})</p>
+                                                    </div>
+                                                </div>
+                                            `}
+                                        </div>
+                                    </div>
+                                `}
                                 
                                 <div class="flex justify-between items-end pt-4 print:pt-2">
                                     <div class="text-center w-48">
