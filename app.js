@@ -727,8 +727,7 @@ const App = () => {
                     [class*="sidebar"],
                     nav,
                     button,
-                    [class*="mobile"],
-                    .hidden {
+                    [class*="mobile"] {
                         display: none !important;
                     }
 

@@ -261,6 +261,15 @@ export const FeesRegister = ({ data }) => {
                         })}
                     `}
             </div>
+
+            <!-- Report Footer -->
+            <div class="mt-6 pt-3 border-t border-slate-200 print:border-black">
+                <div class="flex justify-between items-center text-[8px] text-slate-400">
+                    <span>${settings.schoolName} - ${settings.schoolAddress}</span>
+                    <span>Academic Year: ${settings.academicYear}</span>
+                    <span>Fees Register ${filterGrade !== 'ALL' ? `- ${filterGrade}` : ''}</span>
+                </div>
+            </div>
         </div>
     `;
 };

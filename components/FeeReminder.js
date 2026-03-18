@@ -168,89 +168,49 @@ export const FeeReminder = ({ data }) => {
             <style>
                 @media print {
                     @page {
-                        size: A4 portrait;
-                        margin: 10mm;
+                        size: A4;
+                        margin: 5mm;
                     }
-
-                    .no-print {
-                        display: none !important;
-                    }
-
-                    /* Container */
-                    .fee-reminder-container {
-                        display: block !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                    }
-
-                    /* Full-page reminder cards */
-                    .reminder-card {
-                        display: flex !important;
-                        flex-direction: column;
-                        width: 100% !important;
-                        min-height: 277mm !important; /* A4 height (297) - 20mm total margin */
-                        padding: 0 !important;
-                        margin: 0 !important;
-                        border: none !important;
-                        page-break-after: always;
-                        page-break-inside: avoid;
-                        box-sizing: border-box;
-                        background: white !important;
-                        box-shadow: none !important;
-                    }
-
-                    .reminder-card:last-child {
-                        page-break-after: avoid;
-                    }
-
-                    /* Reset rounding and shadows for cleaner print */
-                    .reminder-card, 
-                    .reminder-card div {
-                        border-radius: 0 !important;
-                        box-shadow: none !important;
-                    }
-
-                    /* Text sizes */
-                    .reminder-card h1 { font-size: 18pt !important; }
-                    .reminder-card h2 { font-size: 13pt !important; }
-                    .reminder-card p { font-size: 11pt !important; }
-                    .reminder-card table { font-size: 10pt !important; }
-
-                    /* Force colors to show */
-                    .print-header-bg {
-                        background-color: #f1f5f9 !important;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                        color: #000 !important;
-                    }
-
-                    .bg-blue-50 {
-                        background-color: #eff6ff !important;
+                    
+                    * {
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                     }
                     
-                    .bg-red-50 {
-                        background-color: #fef2f2 !important;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
+                    body * {
+                        visibility: hidden;
                     }
-
-                    .bg-slate-800 {
-                        background-color: #1e293b !important;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                        color: white !important;
+                    
+                    .reminder-card,
+                    .reminder-card * {
+                        visibility: visible !important;
+                        display: block !important;
                     }
-
-                    .text-red-600 {
-                        color: #dc2626 !important;
-                        -webkit-print-color-adjust: exact !important;
+                    
+                    .reminder-card {
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                        width: 100%;
+                        height: auto;
+                        page-break-after: always;
                     }
-
-                    .text-green-600 {
-                        color: #16a34a !important;
-                        -webkit-print-color-adjust: exact !important;
+                    
+                    .reminder-card:last-child {
+                        page-break-after: auto;
+                    }
+                    
+                    .print-header-bg {
+                        background: #C0C0C0 !important;
+                        display: block !important;
+                        visibility: visible !important;
+                        padding: 10px !important;
+                    }
+                    
+                    .print-header-bg * {
+                        background: transparent !important;
+                        display: inline !important;
+                        visibility: visible !important;
                     }
                 }
             </style>
@@ -278,7 +238,7 @@ export const FeeReminder = ({ data }) => {
                     return html`
                         <div class="reminder-card bg-white rounded-2xl shadow-sm overflow-hidden">
                             <!-- Professional Header -->
-                            <div class="print-header-bg bg-slate-50 text-slate-800 p-6 border-b border-slate-200">
+                            <div class="print-header-bg bg-gradient-to-r from-[#C0C0C0] via-[#D3D3D3] to-[#C0C0C0] text-slate-800 p-6 border-b-2 border-slate-400">
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-4">
                                         ${settings.schoolLogo && html`
@@ -290,21 +250,33 @@ export const FeeReminder = ({ data }) => {
                                         </div>
                                     </div>
                                     <div class="text-right">
-                                        <div class="bg-white/40 backdrop-blur px-4 py-2 rounded-lg border border-slate-300 print:bg-white">
+                                        <div class="bg-white/60 backdrop-blur px-4 py-2 rounded-lg border border-slate-400">
                                             <p class="text-xs text-slate-600 uppercase font-bold">Notice Date</p>
                                             <p class="font-bold text-slate-800">${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Report Info Bar -->
+                                <div class="mt-4 pt-3 border-t border-slate-300/50 grid grid-cols-3 gap-4 text-center">
+                                    <div class="bg-white/50 rounded-lg py-2 px-3">
+                                        <p class="text-[10px] text-slate-500 uppercase font-bold">Class</p>
+                                        <p class="text-sm font-black text-slate-800">${student.grade} ${student.stream || ''}</p>
+                                    </div>
+                                    <div class="bg-white/50 rounded-lg py-2 px-3">
+                                        <p class="text-[10px] text-slate-500 uppercase font-bold">Term</p>
+                                        <p class="text-sm font-black text-slate-800">${selectedTerm === 'ALL' ? 'Full Year' : selectedTerm}</p>
+                                    </div>
+                                    <div class="bg-white/50 rounded-lg py-2 px-3">
+                                        <p class="text-[10px] text-slate-500 uppercase font-bold">Academic Year</p>
+                                        <p class="text-sm font-black text-slate-800">${settings.academicYear || '2025/2026'}</p>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Notice Title -->
-                            <div class="bg-white border-b border-slate-200 py-3 px-6">
+                            <div class="bg-slate-50 border-b border-slate-200 py-3 px-6">
                                 <h2 class="text-center font-black text-slate-800 uppercase tracking-widest text-sm">
-                                    📨 Official Fee Balance Notice 
-                                    ${selectedTerm !== 'ALL' ? `— ${selectedTerm}` : ''}
-                                    <span class="mx-2 text-slate-300">|</span> 
-                                    ${settings.academicYear || '2025/2026'}
+                                    📨 Official Fee Balance Notice
                                 </h2>
                             </div>
 
