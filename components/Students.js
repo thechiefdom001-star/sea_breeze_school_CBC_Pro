@@ -306,7 +306,7 @@ export const Students = ({ data, setData, onSelectStudent }) => {
         const feeStructure = data.settings.feeStructures?.find(f => f.grade === s.grade);
         const selectedKeys = s.selectedFees || ['t1', 't2', 't3'];
         const totalDue = (Number(s.previousArrears) || 0) + (feeStructure ? selectedKeys.reduce((sum, key) => sum + (feeStructure[key] || 0), 0) : 0);
-        const totalPaid = (data.payments || []).filter(p => String(p.studentId) === String(s.id)).reduce((sum, p) => sum + Number(p.amount), 0);
+        const totalPaid = (data.payments || []).filter(p => String(p.studentId) === String(s.id) && !p.voided).reduce((sum, p) => sum + Number(p.amount), 0);
         const balance = totalDue - totalPaid;
 
         if (filterFinance === 'FULL') return matchesGrade && matchesStream && balance <= 0 && totalDue > 0;

@@ -31,10 +31,10 @@ export const FeesRegister = ({ data }) => {
             selectedKeys = ['t1', 't2', 't3'];
         }
         
-        // Cumulative totals
+        // Cumulative totals - filter out voided payments
         const totalDue = (Number(student.previousArrears) || 0) + selectedKeys.reduce((sum, key) => sum + (feeStructure[key] || 0), 0);
         const totalPaid = payments
-            .filter(p => p.studentId === student.id)
+            .filter(p => String(p.studentId) === String(student.id) && !p.voided)
             .reduce((sum, p) => sum + Number(p.amount), 0);
 
         // Term specific totals (for the filter logic)
@@ -48,7 +48,7 @@ export const FeesRegister = ({ data }) => {
                 .reduce((sum, k) => sum + (feeStructure[k] || 0), 0);
             
             const termPaid = payments
-                .filter(p => p.studentId === student.id && (p.term === term || !p.term))
+                .filter(p => p.studentId === student.id && !p.voided && (p.term === term || !p.term))
                 .reduce((sum, p) => sum + Number(p.amount), 0);
             
             return { due: termSpecificDue, paid: termPaid };
