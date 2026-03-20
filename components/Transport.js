@@ -1,6 +1,7 @@
 import { h } from 'preact';
 import { useState } from 'preact/hooks';
 import htm from 'htm';
+import { PrintButtons } from './PrintButtons.js';
 
 const html = htm.bind(h);
 
@@ -71,7 +72,7 @@ export const Transport = ({ data, setData }) => {
                     <button onClick=${() => setShowAddRoute(!showAddRoute)} class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm">
                         ${showAddRoute ? 'Close Form' : 'Add New Route'}
                     </button>
-                    <button onClick=${() => window.print()} class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm">Print Sheet</button>
+                    <${PrintButtons} />
                 </div>
             </div>
 
@@ -175,7 +176,7 @@ export const Transport = ({ data, setData }) => {
                 </div>
             </div>
 
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
+            <div class="transport-container bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
                 <table class="w-full text-left min-w-[600px]">
                     <thead class="bg-slate-50 border-b">
                         <tr>

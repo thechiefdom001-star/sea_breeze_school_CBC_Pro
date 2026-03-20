@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'preact/hooks';
 import htm from 'htm';
 import { Storage } from '../lib/storage.js';
 import { googleSheetSync } from '../lib/googleSheetSync.js';
+import { PrintButtons } from './PrintButtons.js';
 
 const html = htm.bind(h);
 
@@ -441,6 +442,7 @@ export const Assessments = ({ data, setData }) => {
                         >
                             <span>↓</span> Pull from Sheet
                         </button>
+                        <${PrintButtons} />
                     </div>
                 `}
             </div>
@@ -571,7 +573,7 @@ export const Assessments = ({ data, setData }) => {
                 <h3 class="text-lg font-bold">Assessment Records (All Entries)</h3>
                 <p class="text-xs text-slate-500">View, edit, and delete all assessment entries</p>
                 
-                <div class="overflow-x-auto">
+                <div class="assessments-container overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="bg-slate-50 border-b border-slate-200">

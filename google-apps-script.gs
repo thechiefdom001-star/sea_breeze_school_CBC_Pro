@@ -25,7 +25,7 @@ const SHEET_NAMES = {
 };
 
 // Column headers for each sheet
-const STUDENT_HEADERS = ['id', 'name', 'grade', 'stream', 'admissionNo', 'parentContact', 'selectedFees'];
+const STUDENT_HEADERS = ['id', 'name', 'grade', 'stream', 'admissionNo', 'admissionDate', 'upiNo', 'assessmentNo', 'parentContact', 'category', 'previousArrears', 'selectedFees'];
 const ASSESSMENT_HEADERS = ['id', 'studentId', 'studentAdmissionNo', 'studentName', 'grade', 'subject', 'score', 'term', 'examType', 'academicYear', 'date', 'level'];
 const ATTENDANCE_HEADERS = ['id', 'studentId', 'date', 'status', 'term', 'academicYear'];
 const TEACHER_HEADERS = ['id', 'name', 'contact', 'subjects', 'grades', 'employeeNo', 'nssfNo', 'shifNo', 'taxNo'];
@@ -42,10 +42,10 @@ function sanitizeRecord(record) {
   const sanitized = {};
   
   // Allowed string fields (expanded for assessments)
-  const stringFields = ['id', 'name', 'grade', 'stream', 'admissionNo', 'parentContact', 'selectedFees', 
+  const stringFields = ['id', 'name', 'grade', 'stream', 'admissionNo', 'admissionDate', 'upiNo', 'assessmentNo', 'parentContact', 'selectedFees', 
                         'subject', 'term', 'examType', 'academicYear', 'date', 'level', 'status',
                         'receiptNo', 'method', 'reference', 'role', 'employeeNo', 'nssfNo', 'shifNo', 'taxNo',
-                        'voided', 'voidedBy', 'studentId', 'studentAdmissionNo', 'studentName'];
+                        'voided', 'voidedBy', 'studentId', 'studentAdmissionNo', 'studentName', 'category', 'previousArrears'];
   
   // Allowed numeric fields
   const numericFields = ['score', 'amount'];
@@ -90,6 +90,8 @@ function initializeSheets() {
     studentsSheet = ss.insertSheet(SHEET_NAMES.STUDENTS);
     studentsSheet.appendRow(STUDENT_HEADERS);
   }
+    // Ensure Student sheet has all required headers
+    updateSheetHeaders(studentsSheet, STUDENT_HEADERS);
   
   // Create Assessments sheet with ENRICHED headers (includes studentAdmissionNo, studentName)
   let assessmentsSheet = ss.getSheetByName(SHEET_NAMES.ASSESSMENTS);
@@ -98,7 +100,7 @@ function initializeSheets() {
     assessmentsSheet.appendRow(ASSESSMENT_HEADERS);
   } else {
     // Update existing Assessments sheet with new headers
-    updateAssessmentSheetHeaders(assessmentsSheet);
+    updateSheetHeaders(assessmentsSheet, ASSESSMENT_HEADERS);
   }
   
   // Create Attendance sheet
@@ -147,27 +149,41 @@ function initializeSheets() {
 }
 
 /**
- * Update Assessments sheet headers to include studentAdmissionNo and studentName
- * This ensures existing sheets get the new columns
+ * Helper to add missing columns to a sheet
  */
-function updateAssessmentSheetHeaders(sheet) {
+function updateSheetHeaders(sheet, expectedHeaders) {
   if (!sheet) return;
   
-  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const currentHeaders = headerRow.map(function(h) { return String(h || '').trim(); });
+  const headerRange = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn()));
+  const headerValues = headerRange.getValues()[0];
+  const currentHeaders = headerValues.map(function(h) { return String(h || '').trim(); });
   
-  const lastCol = sheet.getLastColumn();
+  let lastCol = sheet.getLastColumn();
+  let headersAdded = false;
   
-  // Check which headers are missing and add them
-  ASSESSMENT_HEADERS.forEach(function(header) {
+  expectedHeaders.forEach(function(header) {
     if (currentHeaders.indexOf(header) === -1) {
-      console.log('Adding missing header: ' + header);
-      // Add column at the end
-      sheet.insertColumnAfter(lastCol);
-      // Set the header value in the new column
-      sheet.getRange(1, lastCol + 1).setValue(header);
+      console.log('Adding missing header to ' + sheet.getName() + ': ' + header);
+      if (lastCol === 0) {
+        sheet.getRange(1, 1).setValue(header);
+        lastCol = 1;
+      } else {
+        sheet.insertColumnAfter(lastCol);
+        sheet.getRange(1, lastCol + 1).setValue(header);
+        lastCol++;
+      }
+      headersAdded = true;
     }
   });
+  
+  return headersAdded;
+}
+
+/**
+ * Update Assessments sheet headers - now uses generic function
+ */
+function updateAssessmentSheetHeaders(sheet) {
+  return updateSheetHeaders(sheet, ASSESSMENT_HEADERS);
 }
 
 /**

@@ -2,6 +2,7 @@ import { h } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
 import htm from 'htm';
 import { Storage } from '../lib/storage.js';
+import { PrintButtons } from './PrintButtons.js';
 
 const html = htm.bind(h);
 
@@ -410,12 +411,15 @@ export const Settings = ({ data, setData }) => {
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="flex items-center justify-between mb-6">
                         <h3 class="font-bold">Fee Structure per Grade (${settings.currency})</h3>
-                        <button 
-                            onClick=${() => setShowAddNewFeeModal(true)}
-                            class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1"
-                        >
-                            + Add New Fee
-                        </button>
+                        <div class="flex items-center gap-2">
+                             <${PrintButtons} />
+                            <button 
+                                onClick=${() => setShowAddNewFeeModal(true)}
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1"
+                            >
+                                + Add New Fee
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- Grade Group Cards -->

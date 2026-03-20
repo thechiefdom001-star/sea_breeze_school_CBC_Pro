@@ -2,6 +2,7 @@ import { h } from 'preact';
 import { useState, useMemo } from 'preact/hooks';
 import htm from 'htm';
 import { Storage } from '../lib/storage.js';
+import { PrintButtons } from './PrintButtons.js';
 
 const html = htm.bind(h);
 
@@ -154,9 +155,7 @@ export const Payroll = ({ data, setData }) => {
                         value=${selectedMonth}
                         onChange=${e => setSelectedMonth(e.target.value)}
                     />
-                    <button onClick=${() => window.print()} class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium">
-                        Batch Print
-                    </button>
+                    <${PrintButtons} />
                 </div>
             </div>
 
@@ -600,9 +599,7 @@ export const Payroll = ({ data, setData }) => {
                         <!-- Modal action bar -->
                         <div class="bg-slate-900 rounded-b-3xl p-4 flex gap-3 no-print">
                             <button onClick=${() => setActivePayslip(null)} class="flex-1 py-3 text-white font-bold hover:bg-slate-700 rounded-xl transition-colors">Close</button>
-                            <button onClick=${() => window.print()} class="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-900 hover:bg-blue-700 transition-colors">
-                                🖨 Print Payslip
-                            </button>
+                            <${PrintButtons} className="flex-1" />
                         </div>
                     </div>
                 </div>

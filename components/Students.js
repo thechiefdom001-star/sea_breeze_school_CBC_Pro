@@ -5,6 +5,7 @@ import { Storage } from '../lib/storage.js';
 import { googleSheetSync } from '../lib/googleSheetSync.js';
 import { Pagination } from '../lib/pagination.js';
 import { PaginationControls } from './Pagination.js';
+import { PrintButtons } from './PrintButtons.js';
 
 const html = htm.bind(h);
 
@@ -379,7 +380,7 @@ export const Students = ({ data, setData, onSelectStudent }) => {
                         <option value="HALF">Half Fees Paid+</option>
                         <option value="ARREARS">With Arrears</option>
                     </select>
-                    <button onClick=${() => window.print()} class="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-200">Print List</button>
+                    <${PrintButtons} />
                     ${data.settings.googleScriptUrl && html`
                         <button 
                             onClick=${handleSyncDeletions}
@@ -542,7 +543,7 @@ export const Students = ({ data, setData, onSelectStudent }) => {
                 </div>
             </div>
 
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
+            <div class="students-container bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
                 <table class="w-full text-left min-w-[800px] students-print-table">
                     <thead class="bg-slate-50 border-b border-slate-100">
                         <tr>

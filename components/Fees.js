@@ -4,6 +4,8 @@ import htm from 'htm';
 import { Storage } from '../lib/storage.js';
 import { paymentService } from '../lib/paymentService.js';
 import { googleSheetSync } from '../lib/googleSheetSync.js';
+import { PrintButtons } from './PrintButtons.js';
+import { PrintService } from '../lib/printService.js';
 
 const html = htm.bind(h);
 
@@ -375,16 +377,18 @@ export const Fees = ({ data, setData }) => {
         alert('Payment restored successfully!');
     };
 
-    const handlePrintReceipt = () => {
-        document.body.classList.add('print-receipt-only');
+    const handlePrintReceipt = (orientation = 'portrait') => {
+        document.body.classList.remove('portrait-mode', 'landscape-mode');
+        document.body.classList.add('print-receipt-only', `${orientation}-mode`);
         window.print();
-        setTimeout(() => document.body.classList.remove('print-receipt-only'), 500);
+        setTimeout(() => document.body.classList.remove('print-receipt-only', 'portrait-mode', 'landscape-mode'), 500);
     };
 
-    const handlePrintTable = () => {
-        document.body.classList.add('print-table-only');
+    const handlePrintTable = (orientation = 'portrait') => {
+        document.body.classList.remove('portrait-mode', 'landscape-mode');
+        document.body.classList.add('print-table-only', `${orientation}-mode`);
         window.print();
-        setTimeout(() => document.body.classList.remove('print-table-only'), 500);
+        setTimeout(() => document.body.classList.remove('print-table-only', 'portrait-mode', 'landscape-mode'), 500);
     };
 
     return html`
@@ -847,9 +851,14 @@ export const Fees = ({ data, setData }) => {
                                 <p class="text-[10px] italic">Thank you for your payment.</p>
                             </div>
                             
-                            <button onClick=${handlePrintReceipt} class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold no-print shadow-lg shadow-blue-500/30">
-                                Print Receipt
-                            </button>
+                            <div class="flex gap-2">
+                                <button onClick=${() => handlePrintReceipt('portrait')} class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold no-print shadow-lg shadow-blue-500/30">
+                                    📄 Portrait
+                                </button>
+                                <button onClick=${() => handlePrintReceipt('landscape')} class="flex-1 py-3 bg-blue-700 text-white rounded-xl font-bold no-print shadow-lg shadow-blue-500/30 border-l border-blue-600">
+                                    🖼️ Landscape
+                                </button>
+                            </div>
                         </div>
                     ` : html`
                         <div class="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-50">
@@ -914,12 +923,7 @@ export const Fees = ({ data, setData }) => {
                             </button>
                         `}
                         ${syncStatus && html`<span class="text-xs font-bold ${syncStatus.includes('✓') ? 'text-green-600' : 'text-blue-600'}">${syncStatus}</span>`}
-                        <button 
-                            onClick=${handlePrintTable}
-                            class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1"
-                        >
-                            🖨️ Print Report
-                        </button>
+                        <${PrintButtons} />
                         <select 
                             class="bg-slate-50 border-0 rounded-lg text-[10px] font-bold uppercase p-2 outline-none focus:ring-1 focus:ring-primary"
                             value=${filterGrade}
@@ -940,7 +944,7 @@ export const Fees = ({ data, setData }) => {
                         <span class="text-xs text-slate-400">${(data.payments || []).length} Total</span>
                     </div>
                 </div>
-                <div class="overflow-x-auto no-scrollbar">
+                <div class="fees-container overflow-x-auto no-scrollbar">
                     <table class="w-full text-left min-w-[500px]">
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase text-slate-500">
                             <tr>

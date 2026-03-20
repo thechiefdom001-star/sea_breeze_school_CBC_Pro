@@ -2,6 +2,7 @@ import { h } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
 import htm from 'htm';
 import { Storage } from '../lib/storage.js';
+import { PrintButtons } from './PrintButtons.js';
 import { googleSheetSync } from '../lib/googleSheetSync.js';
 
 const html = htm.bind(h);
@@ -336,7 +337,7 @@ export const Attendance = ({ data, setData }) => {
                             </div>
                         </div>
 
-                        <div class="overflow-x-auto">
+                        <div class="attendance-container overflow-x-auto">
                             <table class="w-full text-xs border-collapse">
                                 <thead>
                                     <tr class="bg-slate-100">
@@ -386,12 +387,7 @@ export const Attendance = ({ data, setData }) => {
                         </div>
 
                         <div class="mt-4 flex gap-2 no-print">
-                            <button 
-                                onClick=${() => window.print()}
-                                class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
-                            >
-                                Print
-                            </button>
+                            <${PrintButtons} className="flex-1" />
                             <button 
                                 onClick=${() => setShowPrintModal(false)}
                                 class="px-4 py-2 border rounded-lg"

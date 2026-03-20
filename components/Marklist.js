@@ -5,6 +5,7 @@ import { Storage } from '../lib/storage.js';
 import { googleSheetSync } from '../lib/googleSheetSync.js';
 import { Pagination } from '../lib/pagination.js';
 import { PaginationControls } from './Pagination.js';
+import { PrintButtons } from './PrintButtons.js';
 
 const html = htm.bind(h);
 
@@ -107,9 +108,9 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                         value=${selectedExamType}
                         onChange=${(e) => setSelectedExamType(e.target.value)}
                     >
-                        ${examTypes.map(type => html`<option key=${type} value=${type}>${type}</option>`)}
+                        ${gradeStreamOptions.map(gs => html`<option key=${gs.value} value=${gs.value}>${gs.label}</option>`)}
                     </select>
-                    <button onClick=${() => window.print()} class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">Print</button>
+                    <${PrintButtons} />
                 </div>
             </div>
 
@@ -120,7 +121,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                 <p class="text-[10px] font-bold text-slate-400 uppercase mt-1">${selectedTerm} | ${selectedExamType} EXAM • Academic Year: ${academicYear}</p>
             </div>
 
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
+            <div class="marklist-container bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
                 <table class="w-full text-left border-collapse min-w-[1200px]">
                     <thead class="bg-slate-50 border-b border-slate-200">
                         <tr class="text-center print:bg-slate-100">
