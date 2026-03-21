@@ -53,16 +53,22 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
         return safeArray(Storage.getSubjectsForGrade(selectedGrade || 'GRADE 1'));
     }, [selectedGrade]);
 
-    const filteredStudents = useMemo(() => {
+    const classStudents = useMemo(() => {
         return studentsList.filter(s => {
             const matchesGrade = s.grade === selectedGrade;
             const matchesStream = !selectedStream || s.stream === selectedStream;
+            return matchesGrade && matchesStream;
+        });
+    }, [studentsList, selectedGrade, selectedStream]);
+
+    const filteredStudents = useMemo(() => {
+        return classStudents.filter(s => {
             const matchesSearch = !searchTerm || 
                 (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (s.admissionNo && s.admissionNo.toLowerCase().includes(searchTerm.toLowerCase()));
-            return matchesGrade && matchesStream && matchesSearch;
+            return matchesSearch;
         });
-    }, [studentsList, selectedGrade, selectedStream, searchTerm]);
+    }, [classStudents, searchTerm]);
 
     // Pagination
     const handlePageChange = (newPage, newItemsPerPage) => {
@@ -112,7 +118,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                         value=${selectedExamType}
                         onChange=${(e) => setSelectedExamType(e.target.value)}
                     >
-                        ${gradeStreamOptions.map(gs => html`<option key=${gs.value} value=${gs.value}>${gs.label}</option>`)}
+                        ${examTypes.map(et => html`<option key=${et} value=${et}>${et}</option>`)}
                     </select>
                     <div class="relative no-print flex-1 md:flex-none">
                         <input 
@@ -255,7 +261,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                     </tbody>
                     <!-- Print tbody: ALL students, hidden on screen, shown during print -->
                     <tbody class="marklist-print-rows" style="display:none">
-                        ${students.map(student => {
+                        ${classStudents.map(student => {
         const remark = remarksList.find(r => r.studentId === student.id) || { teacher: '', principal: '' };
         return html`
                                 <tr key=${`print-${student.id}`} class="even:bg-slate-50">
@@ -298,7 +304,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                         <tr class="font-bold text-slate-900">
                             <td class="px-4 py-3 text-[10px] uppercase border-r">Column Totals</td>
                             ${subjects.map(subject => {
-        const total = students.reduce((sum, s) => {
+        const total = classStudents.reduce((sum, s) => {
             const a = assessmentsList.find(as =>
                 as.studentId === s.id &&
                 as.subject === subject &&
@@ -319,7 +325,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                         <tr class="font-black text-blue-600">
                             <td class="px-4 py-3 text-[10px] uppercase border-r">Mean Average</td>
                             ${subjects.map(subject => {
-        const validScores = students.map(s => {
+        const validScores = classStudents.map(s => {
             const a = assessmentsList.find(as =>
                 as.studentId === s.id &&
                 as.subject === subject &&
@@ -360,7 +366,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                     <h4 class="text-xs font-bold text-slate-500 uppercase mb-3">Subject Mean Scores</h4>
                     <div class="space-y-3">
                         ${subjects.map(subject => {
-        const validScores = students.map(s => {
+        const validScores = classStudents.map(s => {
             const a = assessmentsList.find(as =>
                 as.studentId === s.id &&
                 as.subject === subject &&
@@ -397,7 +403,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
 
                 <div class="mt-6 grid grid-cols-4 gap-4">
                     <div class="p-3 bg-green-50 rounded-xl border border-green-100 text-center marklist-graph">
-                        <p class="text-lg font-black text-green-700">${students.length > 0 ? Math.round(students.reduce((sum, s) => {
+                        <p class="text-lg font-black text-green-700">${classStudents.length > 0 ? Math.round(classStudents.reduce((sum, s) => {
         const valid = subjects.map(subj => {
             const a = assessmentsList.find(as =>
                 as.studentId === s.id &&
@@ -409,12 +415,12 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
             return a ? Number(a.score) : null;
         }).filter(x => x !== null);
         return sum + (valid.length > 0 ? valid.reduce((a, b) => a + b, 0) / valid.length : 0);
-    }, 0) / students.length) : 0}%</p>
+    }, 0) / classStudents.length) : 0}%</p>
                         <p class="text-[8px] font-bold text-green-600 uppercase">Class Mean</p>
                     </div>
                     <div class="p-3 bg-blue-50 rounded-xl border border-blue-100 text-center marklist-graph">
                         <p class="text-lg font-black text-blue-700">${subjects.length > 0 ? Math.round(subjects.reduce((sum, s) => {
-        const valid = students.map(st => {
+        const valid = classStudents.map(st => {
             const a = assessmentsList.find(as =>
                 as.studentId === st.id &&
                 as.subject === s &&
@@ -429,11 +435,11 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                         <p class="text-[8px] font-bold text-blue-600 uppercase">Subject Mean</p>
                     </div>
                     <div class="p-3 bg-purple-50 rounded-xl border border-purple-100 text-center marklist-graph">
-                        <p class="text-lg font-black text-purple-700">${students.length}</p>
+                        <p class="text-lg font-black text-purple-700">${classStudents.length}</p>
                         <p class="text-[8px] font-bold text-purple-600 uppercase">Total Students</p>
                     </div>
                     <div class="p-3 bg-orange-50 rounded-xl border border-orange-100 text-center marklist-graph">
-                        <p class="text-lg font-black text-orange-700">${students.length > 0 ? Math.round(students.reduce((sum, s) => {
+                        <p class="text-lg font-black text-orange-700">${classStudents.length > 0 ? Math.round(classStudents.reduce((sum, s) => {
         const valid = subjects.map(subj => {
             const a = assessmentsList.find(as =>
                 as.studentId === s.id &&
@@ -445,7 +451,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
             return a ? Number(a.score) : null;
         }).filter(x => x !== null);
         return sum + (valid.length > 0 ? valid.reduce((a, b) => a + b, 0) / valid.length : 0);
-    }, 0) / students.length / 12.5) || '-' : '-'}</p>
+    }, 0) / classStudents.length / 12.5) || '-' : '-'}</p>
                         <p class="text-[8px] font-bold text-orange-600 uppercase">Overall Points</p>
                     </div>
                 </div>
