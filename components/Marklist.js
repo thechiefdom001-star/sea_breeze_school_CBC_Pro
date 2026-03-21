@@ -38,6 +38,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
     const [selectedGradeStream, setSelectedGradeStream] = useState(defaultGradeStream);
     const [selectedTerm, setSelectedTerm] = useState('T1');
     const [selectedExamType, setSelectedExamType] = useState('End-Term');
+    const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -52,13 +53,16 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
         return safeArray(Storage.getSubjectsForGrade(selectedGrade || 'GRADE 1'));
     }, [selectedGrade]);
 
-    const students = useMemo(() => {
+    const filteredStudents = useMemo(() => {
         return studentsList.filter(s => {
             const matchesGrade = s.grade === selectedGrade;
             const matchesStream = !selectedStream || s.stream === selectedStream;
-            return matchesGrade && matchesStream;
+            const matchesSearch = !searchTerm || 
+                (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (s.admissionNo && s.admissionNo.toLowerCase().includes(searchTerm.toLowerCase()));
+            return matchesGrade && matchesStream && matchesSearch;
         });
-    }, [studentsList, selectedGrade, selectedStream]);
+    }, [studentsList, selectedGrade, selectedStream, searchTerm]);
 
     // Pagination
     const handlePageChange = (newPage, newItemsPerPage) => {
@@ -70,7 +74,7 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
         }
     };
 
-    const paginatedStudents = Pagination.getPageItems(students, currentPage, itemsPerPage);
+    const paginatedStudents = Pagination.getPageItems(filteredStudents, currentPage, itemsPerPage);
 
     const handleTeacherRemarkChange = (studentId, value) => {
         const existing = remarksList.find(r => r.studentId === studentId) || { teacher: '', principal: '' };
@@ -110,6 +114,16 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                     >
                         ${gradeStreamOptions.map(gs => html`<option key=${gs.value} value=${gs.value}>${gs.label}</option>`)}
                     </select>
+                    <div class="relative no-print flex-1 md:flex-none">
+                        <input 
+                            type="text"
+                            placeholder="Search student..."
+                            class="w-full md:w-48 p-2 pl-8 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                            value=${searchTerm}
+                            onInput=${(e) => setSearchTerm(e.target.value)}
+                        />
+                        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                    </div>
                     <${PrintButtons} />
                 </div>
             </div>
@@ -326,17 +340,17 @@ export const Marklist = ({ data = {}, setData = () => { } }) => {
                         </tr>
                     </tfoot>
                 </table>
-                ${students.length > 0 && html`
+                ${filteredStudents.length > 0 && html`
                     <div class="no-print">
                         ${h(PaginationControls, {
                             currentPage,
                             onPageChange: handlePageChange,
-                            totalItems: students.length,
+                            totalItems: filteredStudents.length,
                             itemsPerPage
                         })}
                     </div>
                 `}
-                ${students.length === 0 && html`<div class="p-12 text-center text-slate-400">No students registered in this grade.</div>`}
+                ${filteredStudents.length === 0 && html`<div class="p-12 text-center text-slate-400">No students found matching your search.</div>`}
             </div>
 
             <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-6 marklist-graph">

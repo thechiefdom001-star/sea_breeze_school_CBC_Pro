@@ -21,13 +21,22 @@ export const Attendance = ({ data, setData }) => {
     const [selectedTerm, setSelectedTerm] = useState('T1');
     const [selectedWeek, setSelectedWeek] = useState(1);
     const [showPrintModal, setShowPrintModal] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const streams = data?.settings?.streams || [];
 
     const students = (data?.students || []).filter(s => {
-        if (s.grade !== selectedGrade) return false;
-        if (selectedStream === 'ALL') return true;
-        return s.stream === selectedStream;
+        const inGrade = s.grade === selectedGrade;
+        if (!inGrade) return false;
+        
+        const inStream = selectedStream === 'ALL' || s.stream === selectedStream;
+        if (!inStream) return false;
+
+        const matchesSearch = !searchTerm || 
+            (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (s.admissionNo && s.admissionNo.toLowerCase().includes(searchTerm.toLowerCase()));
+        
+        return matchesSearch;
     });
     const weeksInTerm = Storage.getWeeksForTerm(data.settings, selectedTerm);
     const currentWeek = weeksInTerm[selectedWeek - 1] || { dates: [] };
@@ -214,6 +223,16 @@ export const Attendance = ({ data, setData }) => {
                             All Absent
                         </button>
                     </div>
+                </div>
+                <div class="mt-4 no-print relative">
+                    <input 
+                        type="text"
+                        placeholder="Search student in this grade..."
+                        class="w-full md:w-64 px-8 py-2 border rounded-lg text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500"
+                        value=${searchTerm}
+                        onInput=${(e) => setSearchTerm(e.target.value)}
+                    />
+                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
                 </div>
             </div>
 

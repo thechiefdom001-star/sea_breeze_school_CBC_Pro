@@ -24,6 +24,7 @@ export const Fees = ({ data, setData }) => {
     const [promptMethod, setPromptMethod] = useState('mpesa');
     const [promptStatus, setPromptStatus] = useState('');
     const [syncStatus, setSyncStatus] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const streams = (data && data.settings && data.settings.streams) || [];
 
@@ -941,6 +942,16 @@ export const Fees = ({ data, setData }) => {
                             <option value="voided">Voided Only</option>
                             <option value="all">Show All</option>
                         </select>
+                        <div class="relative no-print">
+                            <input 
+                                type="text"
+                                placeholder="Search receipt or student..."
+                                class="bg-slate-50 border border-slate-200 text-slate-600 px-3 py-1.5 pl-8 rounded-lg text-[10px] font-bold outline-none focus:ring-1 focus:ring-primary w-48"
+                                value=${searchTerm}
+                                onInput=${(e) => setSearchTerm(e.target.value)}
+                            />
+                            <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                        </div>
                         <span class="text-xs text-slate-400">${(data.payments || []).length} Total</span>
                     </div>
                 </div>
@@ -967,6 +978,15 @@ export const Fees = ({ data, setData }) => {
                 // Filter by voided status
                 if (filterVoided === 'active' && p.voided) return false;
                 if (filterVoided === 'voided' && !p.voided) return false;
+                
+                // Search term filter
+                if (searchTerm) {
+                    const s = (data.students || []).find(st => String(st.id) === String(p.studentId));
+                    const searchLower = searchTerm.toLowerCase();
+                    const matchesReceipt = p.receiptNo && p.receiptNo.toLowerCase().includes(searchLower);
+                    const matchesStudent = s && s.name && s.name.toLowerCase().includes(searchLower);
+                    if (!matchesReceipt && !matchesStudent) return false;
+                }
                 return true;
             })
             .slice().reverse().map(p => {

@@ -10,6 +10,7 @@ export const Transport = ({ data, setData }) => {
     const [selectedRouteId, setSelectedRouteId] = useState('');
     const [showAddRoute, setShowAddRoute] = useState(false);
     const [newRoute, setNewRoute] = useState({ name: '', fee: '' });
+    const [searchTerm, setSearchTerm] = useState('');
 
     const transport = data.transport || { routes: [], assignments: [] };
 
@@ -72,6 +73,16 @@ export const Transport = ({ data, setData }) => {
                     <button onClick=${() => setShowAddRoute(!showAddRoute)} class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm">
                         ${showAddRoute ? 'Close Form' : 'Add New Route'}
                     </button>
+                    <div class="relative no-print">
+                        <input 
+                            type="text"
+                            placeholder="Search student..."
+                            class="p-2 pl-8 bg-white border border-slate-200 rounded-xl outline-none w-48 text-sm font-bold"
+                            value=${searchTerm}
+                            onInput=${(e) => setSearchTerm(e.target.value)}
+                        />
+                        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                    </div>
                     <${PrintButtons} />
                 </div>
             </div>
@@ -187,7 +198,14 @@ export const Transport = ({ data, setData }) => {
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-50">
-                        ${transport.assignments.map(a => {
+                        ${transport.assignments
+                            .filter(a => {
+                                if (!searchTerm) return true;
+                                const student = (data.students || []).find(s => String(s.id) === String(a.studentId));
+                                const searchLower = searchTerm.toLowerCase();
+                                return student && student.name && student.name.toLowerCase().includes(searchLower);
+                            })
+                            .map(a => {
                             const student = (data.students || []).find(s => String(s.id) === String(a.studentId));
                             const route = transport.routes.find(r => r.id === a.routeId);
                             return html`

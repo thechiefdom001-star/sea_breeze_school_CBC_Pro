@@ -42,6 +42,7 @@ export const Payroll = ({ data, setData }) => {
     const [filterYear,  setFilterYear]  = useState(String(now.getFullYear()));
     const [activePayslip, setActivePayslip] = useState(null);
     const [editingStaff,  setEditingStaff]  = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const allStaff = useMemo(() => [
         ...(data.teachers || []).map(t => ({ ...t, type: 'Teaching' })),
@@ -98,10 +99,18 @@ export const Payroll = ({ data, setData }) => {
     };
 
     // Build table rows for selected month
-    const tableRows = allStaff.map(staff => {
-        const entry = payroll.find(p => p.staffId === staff.id && p.month === selectedMonth) || null;
-        return { staff, entry };
-    });
+    const tableRows = allStaff
+        .filter(staff => {
+            if (!searchTerm) return true;
+            const searchLower = searchTerm.toLowerCase();
+            return (staff.name && staff.name.toLowerCase().includes(searchLower)) ||
+                   (staff.role && staff.role.toLowerCase().includes(searchLower)) ||
+                   (staff.type && staff.type.toLowerCase().includes(searchLower));
+        })
+        .map(staff => {
+            const entry = payroll.find(p => p.staffId === staff.id && p.month === selectedMonth) || null;
+            return { staff, entry };
+        });
 
     // Column totals for selected month (only entries that exist)
     const totals = tableRows.reduce((acc, { entry: e }) => {
@@ -155,6 +164,16 @@ export const Payroll = ({ data, setData }) => {
                         value=${selectedMonth}
                         onChange=${e => setSelectedMonth(e.target.value)}
                     />
+                    <div class="relative no-print">
+                        <input 
+                            type="text"
+                            placeholder="Search staff..."
+                            class="p-2 pl-8 bg-white border border-slate-200 rounded-xl outline-none w-48 text-sm font-bold"
+                            value=${searchTerm}
+                            onInput=${(e) => setSearchTerm(e.target.value)}
+                        />
+                        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                    </div>
                     <${PrintButtons} />
                 </div>
             </div>
