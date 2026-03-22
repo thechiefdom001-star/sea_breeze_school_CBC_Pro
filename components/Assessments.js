@@ -7,7 +7,7 @@ import { PrintButtons } from './PrintButtons.js';
 
 const html = htm.bind(h);
 
-export const Assessments = ({ data, setData }) => {
+export const Assessments = ({ data, setData, isAdmin, teacherSession }) => {
     const [selectedGrade, setSelectedGrade] = useState('GRADE 1');
     const [selectedStream, setSelectedStream] = useState('ALL');
     const [selectedSubject, setSelectedSubject] = useState('');
@@ -20,6 +20,28 @@ export const Assessments = ({ data, setData }) => {
 
     const streams = data?.settings?.streams || [];
     const subjects = Storage.getSubjectsForGrade(selectedGrade);
+
+    // Track activity helper
+    const trackActivity = async (action, assessment, oldData = null) => {
+        if (!data.settings?.googleScriptUrl) return;
+        
+        try {
+            googleSheetSync.setSettings(data.settings);
+            const student = data.students?.find(s => String(s.id) === String(assessment.studentId));
+            
+            await googleSheetSync.trackActivity(
+                action,
+                'Assessments',
+                assessment.id,
+                student?.name || assessment.studentName || 'Unknown Student',
+                `${assessment.subject} - ${assessment.term} ${assessment.examType}: Score ${assessment.score}`,
+                oldData,
+                assessment
+            );
+        } catch (err) {
+            console.warn('Activity tracking failed:', err.message);
+        }
+    };
 
     // Create a robust student lookup map - rebuild when data.students changes
     const studentLookup = useMemo(() => {
@@ -134,6 +156,10 @@ export const Assessments = ({ data, setData }) => {
             date: new Date().toISOString().split('T')[0]
         };
         
+        // Track activity
+        const action = existing ? 'EDIT' : 'ADD';
+        trackActivity(action, newAssessment, existing);
+        
         // 1. SAVE LOCALLY FIRST
         const updatedAssessments = [...otherAssessments, newAssessment];
         setData({ ...data, assessments: updatedAssessments });
@@ -237,7 +263,14 @@ export const Assessments = ({ data, setData }) => {
     const deleteAssessment = async (assessmentId) => {
         if (!confirm('Delete this assessment record?')) return;
         
+        const assessmentToDelete = data.assessments.find(a => a.id === assessmentId);
         const updatedAssessments = data.assessments.filter(a => a.id !== assessmentId);
+        
+        // Track activity before deleting
+        if (assessmentToDelete) {
+            trackActivity('DELETE', assessmentToDelete);
+        }
+        
         setData({ ...data, assessments: updatedAssessments });
         
         // Delete from Google Sheet

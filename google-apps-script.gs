@@ -21,7 +21,8 @@ const SHEET_NAMES = {
   STAFF: 'Staff',
   PAYMENTS: 'Payments',
   ACTIVITY: 'Activity',  // For tracking active users
-  TEACHER_CREDENTIALS: 'TeacherCredentials'  // For teacher login credentials
+  TEACHER_CREDENTIALS: 'TeacherCredentials',  // For teacher login credentials
+  ACTIVITY_LOG: 'ActivityLog'  // For logging all user activities
 };
 
 // Column headers for each sheet
@@ -32,6 +33,7 @@ const TEACHER_HEADERS = ['id', 'name', 'contact', 'subjects', 'grades', 'employe
 const STAFF_HEADERS = ['id', 'name', 'role', 'contact', 'employeeNo', 'nssfNo', 'shifNo', 'taxNo'];
 const PAYMENT_HEADERS = ['id', 'studentId', 'amount', 'term', 'academicYear', 'date', 'receiptNo', 'method', 'reference', 'items', 'voided', 'voidedAt'];
 const TEACHER_CREDENTIALS_HEADERS = ['username', 'passwordHash', 'teacherId', 'name', 'role', 'createdAt', 'lastLogin'];
+const ACTIVITY_LOG_HEADERS = ['id', 'userId', 'userName', 'userRole', 'action', 'module', 'recordId', 'recordName', 'details', 'oldValue', 'newValue', 'timestamp', 'ipAddress'];
 
 /**
  * Sanitize incoming records to prevent injection attacks
@@ -144,6 +146,17 @@ function initializeSheets() {
     teacherCredSheet = ss.insertSheet(SHEET_NAMES.TEACHER_CREDENTIALS);
     teacherCredSheet.appendRow(TEACHER_CREDENTIALS_HEADERS);
   }
+
+  // Create ActivityLog sheet for tracking user actions
+  let activityLogSheet = ss.getSheetByName(SHEET_NAMES.ACTIVITY_LOG);
+  if (!activityLogSheet) {
+    activityLogSheet = ss.insertSheet(SHEET_NAMES.ACTIVITY_LOG);
+    activityLogSheet.appendRow(ACTIVITY_LOG_HEADERS);
+    // Format the ActivityLog sheet
+    activityLogSheet.getRange(1, 1, 1, ACTIVITY_LOG_HEADERS.length).setFontWeight('bold');
+    activityLogSheet.getRange(1, 1, 1, ACTIVITY_LOG_HEADERS.length).setBackground('#4285f4');
+    activityLogSheet.getRange(1, 1, 1, ACTIVITY_LOG_HEADERS.length).setFontColor('#ffffff');
+  }
   
   return { success: true, message: 'Sheets initialized successfully' };
 }
@@ -199,6 +212,7 @@ function doGet(e) {
   let response = {};
   
   console.log(`[Script] Action: ${action}, Version: ${version}, Time: ${new Date().toISOString()}`);
+  console.log(`[DEBUG] All parameters: ${JSON.stringify(e.parameter)}`);
   
   try {
     // Handle data parameter for GET requests
@@ -421,6 +435,41 @@ function doGet(e) {
         
       case 'getActiveUsers':
         response = getActiveUsers();
+        break;
+        
+      case 'getAllIds':
+        response = getAllIds(e.parameter.sheetName);
+        break;
+        
+      case 'logActivity':
+        let logData = {};
+        if (e.parameter.data) {
+          try {
+            logData = JSON.parse(decodeURIComponent(e.parameter.data));
+          } catch (err) {
+            try {
+              logData = JSON.parse(e.parameter.data);
+            } catch (err2) {}
+          }
+        }
+        response = logActivity(logData);
+        break;
+        
+      case 'getRecentActivities':
+        response = getRecentActivities(
+          parseInt(e.parameter.limit) || 50,
+          e.parameter.module || null,
+          e.parameter.userId || null
+        );
+        break;
+        
+      case 'getActivitySummary':
+        response = getActivitySummary(parseInt(e.parameter.days) || 7);
+        break;
+        
+      case 'clearActivityLog':
+        console.log('[DEBUG] clearActivityLog case reached for action:', action);
+        response = clearActivityLog();
         break;
         
       // Teacher Authentication via GET
@@ -778,6 +827,24 @@ function doPost(e) {
         response = deleteTeacherAccount(data.username);
         break;
         
+      // Activity Log handlers
+      case 'logActivity':
+        response = logActivity(data);
+        break;
+        
+      case 'getRecentActivities':
+        const limit = parseInt(e.parameter.limit) || 50;
+        response = getRecentActivities(limit, e.parameter.module || null, e.parameter.userId || null);
+        break;
+        
+      case 'getActivitySummary':
+        response = getActivitySummary(parseInt(e.parameter.days) || 7);
+        break;
+        
+      case 'clearActivityLog':
+        response = clearActivityLog();
+        break;
+        
       default:
         response = { error: 'Unknown action' };
     }
@@ -859,6 +926,32 @@ function getAllRecords(sheetName, headers) {
   
   console.log(`[Sheet] ${sheetName}: ${data.length - 1} data rows → ${results.length} records`);
   return results;
+}
+
+/**
+ * Get all IDs from a sheet (lightweight - for deletion detection)
+ */
+function getAllIds(sheetName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  
+  if (!sheet) return { ids: [] };
+  
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { ids: [] };
+  
+  const data = sheet.getDataRange().getValues();
+  const ids = [];
+  
+  // First row is header, skip it
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][0] || '').trim();
+    if (id && id !== 'id') {
+      ids.push(id);
+    }
+  }
+  
+  return { ids: ids };
 }
 
 /**
@@ -1612,4 +1705,188 @@ function deleteTeacherAccount(username) {
   }
   
   return { success: false, error: 'Account not found' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ACTIVITY LOG SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Log an activity to the ActivityLog sheet
+ * @param {Object} params - Activity parameters
+ */
+function logActivity(params) {
+  const { userId, userName, userRole, action, module, recordId, recordName, details, oldValue, newValue } = params;
+  
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let logSheet = ss.getSheetByName(SHEET_NAMES.ACTIVITY_LOG);
+    
+    if (!logSheet) {
+      logSheet = ss.insertSheet(SHEET_NAMES.ACTIVITY_LOG);
+      logSheet.appendRow(ACTIVITY_LOG_HEADERS);
+    }
+    
+    const logEntry = [
+      'LOG-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+      userId || 'system',
+      userName || 'System',
+      userRole || 'system',
+      action, // ADD, EDIT, DELETE, VIEW, SYNC, LOGIN, LOGOUT, VOID
+      module, // Students, Assessments, Fees, etc.
+      recordId || '',
+      recordName || '',
+      details || '',
+      oldValue ? JSON.stringify(oldValue).substring(0, 500) : '',
+      newValue ? JSON.stringify(newValue).substring(0, 500) : '',
+      new Date().toISOString(),
+      ''
+    ];
+    
+    logSheet.appendRow(logEntry);
+    
+    return { success: true, logId: logEntry[0] };
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get recent activities from the log
+ * @param {number} limit - Number of activities to return (default 50)
+ * @param {string} module - Filter by module (optional)
+ * @param {string} userId - Filter by user (optional)
+ */
+function getRecentActivities(limit, module, userId) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const logSheet = ss.getSheetByName(SHEET_NAMES.ACTIVITY_LOG);
+    
+    if (!logSheet) return [];
+    
+    const lastRow = logSheet.getLastRow();
+    if (lastRow <= 1) return [];
+    
+    const data = logSheet.getDataRange().getValues();
+    const activities = [];
+    
+    // Start from the last row (most recent) and go backwards
+    for (let i = data.length - 1; i >= 0 && activities.length < (limit || 50); i--) {
+      const row = data[i];
+      
+      // Apply filters
+      if (module && row[5] !== module) continue;
+      if (userId && row[1] !== userId) continue;
+      
+      activities.push({
+        id: row[0],
+        userId: row[1],
+        userName: row[2],
+        userRole: row[3],
+        action: row[4],
+        module: row[5],
+        recordId: row[6],
+        recordName: row[7],
+        details: row[8],
+        oldValue: row[9],
+        newValue: row[10],
+        timestamp: row[11]
+      });
+    }
+    
+    return activities;
+  } catch (error) {
+    console.error('Failed to get activities:', error);
+    return [];
+  }
+}
+
+/**
+ * Get activity summary/statistics
+ */
+function getActivitySummary(days) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const logSheet = ss.getSheetByName(SHEET_NAMES.ACTIVITY_LOG);
+    
+    if (!logSheet) return { total: 0, byAction: {}, byModule: {}, byUser: {} };
+    
+    const data = logSheet.getDataRange().getValues();
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - (days || 7));
+    
+    const stats = {
+      total: 0,
+      byAction: {},
+      byModule: {},
+      byUser: {},
+      recent: []
+    };
+    
+    for (let i = data.length - 1; i >= 0; i--) {
+      const row = data[i];
+      const timestamp = new Date(row[11]);
+      
+      // Skip if outside date range
+      if (timestamp < cutoffDate) continue;
+      
+      stats.total++;
+      
+      // Count by action
+      const action = row[4] || 'UNKNOWN';
+      stats.byAction[action] = (stats.byAction[action] || 0) + 1;
+      
+      // Count by module
+      const module = row[5] || 'UNKNOWN';
+      stats.byModule[module] = (stats.byModule[module] || 0) + 1;
+      
+      // Count by user
+      const userName = row[2] || 'Unknown';
+      stats.byUser[userName] = (stats.byUser[userName] || 0) + 1;
+      
+      // Add to recent if within last 24 hours
+      const dayAgo = new Date();
+      dayAgo.setDate(dayAgo.getDate() - 1);
+      if (timestamp > dayAgo) {
+        stats.recent.push({
+          userName: row[2],
+          action: row[4],
+          module: row[5],
+          recordName: row[7],
+          details: row[8],
+          timestamp: row[11]
+        });
+      }
+    }
+    
+    return stats;
+  } catch (error) {
+    console.error('Failed to get activity summary:', error);
+    return { total: 0, byAction: {}, byModule: {}, byUser: {} };
+  }
+}
+
+/**
+ * Clear activity log (delete all entries)
+ */
+function clearActivityLog() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const logSheet = ss.getSheetByName(SHEET_NAMES.ACTIVITY_LOG);
+    
+    if (!logSheet) {
+      return { success: true, message: 'Activity log sheet not found' };
+    }
+    
+    const lastRow = logSheet.getLastRow();
+    if (lastRow > 1) {
+      logSheet.deleteRows(2, lastRow - 1);
+    }
+    
+    return { success: true, message: 'Activity log cleared' };
+  } catch (error) {
+    console.error('Failed to clear activity log:', error);
+    return { success: false, error: error.message };
+  }
 }

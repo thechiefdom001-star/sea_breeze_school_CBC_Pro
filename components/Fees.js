@@ -9,7 +9,7 @@ import { PrintService } from '../lib/printService.js';
 
 const html = htm.bind(h);
 
-export const Fees = ({ data, setData }) => {
+export const Fees = ({ data, setData, isAdmin, teacherSession }) => {
     const [selectedStudentId, setSelectedStudentId] = useState('');
     const [selectedTerm, setSelectedTerm] = useState('T1');
     const [filterGrade, setFilterGrade] = useState('ALL');
@@ -27,6 +27,26 @@ export const Fees = ({ data, setData }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const streams = (data && data.settings && data.settings.streams) || [];
+
+    // Track activity helper
+    const trackActivity = async (action, payment, studentName = '') => {
+        if (!data.settings?.googleScriptUrl) return;
+        
+        try {
+            googleSheetSync.setSettings(data.settings);
+            await googleSheetSync.trackActivity(
+                action,
+                action === 'VOID' ? 'Fees' : 'Payments',
+                payment.id,
+                studentName || 'Unknown',
+                `KES ${payment.amount.toLocaleString()} - ${payment.term} | Receipt: ${payment.receiptNo}`,
+                null,
+                payment
+            );
+        } catch (err) {
+            console.warn('Activity tracking failed:', err.message);
+        }
+    };
 
     const defaultFeeColumns = [
         { key: 'previousArrears', label: 'Arrears B/F' },
@@ -152,6 +172,9 @@ export const Fees = ({ data, setData }) => {
             date: new Date().toISOString().split('T')[0],
             receiptNo: 'RCP-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0')
         };
+
+        // Track activity
+        trackActivity('ADD', newPayment, student.name);
 
         const financials = Storage.getStudentFinancials(student, data.payments, data.settings);
         const balanceAfter = financials.balance - totalAmount;
@@ -312,6 +335,9 @@ export const Fees = ({ data, setData }) => {
         const confirmMsg = `VOID PAYMENT\n\nReceipt: ${payment.receiptNo}\nStudent: ${student && student.name || 'Unknown'}\nAmount: ${data.settings.currency} ${payment.amount.toLocaleString()}\nDate: ${payment.date}\n\nAre you sure you want to CANCEL this transaction?`;
 
         if (!confirm(confirmMsg)) return;
+
+        // Track activity before voiding
+        trackActivity('VOID', payment, student?.name || 'Unknown');
 
         // Mark payment as void instead of deleting
         const updatedPayments = data.payments.map(p => {

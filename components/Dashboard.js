@@ -3,10 +3,11 @@ import { useState, useEffect } from 'preact/hooks';
 import htm from 'htm';
 import { Storage } from '../lib/storage.js';
 import { googleSheetSync } from '../lib/googleSheetSync.js';
+import { ActivityLog } from './ActivityLog.js';
 
 const html = htm.bind(h);
 
-export const Dashboard = ({ data, googleSyncStatus }) => {
+export const Dashboard = ({ data, googleSyncStatus, isAdmin, teacherSession }) => {
     const students = data?.students || [];
     const payments = data?.payments || [];
     const assessments = data?.assessments || [];
@@ -315,6 +316,18 @@ export const Dashboard = ({ data, googleSyncStatus }) => {
                         })}
                     </div>
                 </div>
+
+                <!-- Activity Log -->
+                ${isAdmin && html`
+                    <div class="lg:col-span-2">
+                        <${ActivityLog} 
+                            settings=${settings} 
+                            isAdmin=${isAdmin}
+                            teacherSession=${teacherSession}
+                            limit=${25}
+                        />
+                    </div>
+                `}
             </div>
         </div>
     `;

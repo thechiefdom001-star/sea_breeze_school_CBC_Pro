@@ -9,7 +9,7 @@ import { PrintButtons } from './PrintButtons.js';
 
 const html = htm.bind(h);
 
-export const Students = ({ data, setData, onSelectStudent }) => {
+export const Students = ({ data, setData, onSelectStudent, isAdmin, teacherSession }) => {
     const [showAdd, setShowAdd] = useState(false);
     const [syncStatus, setSyncStatus] = useState('');
     const [filterGrade, setFilterGrade] = useState('ALL');
@@ -18,6 +18,26 @@ export const Students = ({ data, setData, onSelectStudent }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    // Track activity helper
+    const trackActivity = async (action, student, oldData = null) => {
+        if (!data.settings?.googleScriptUrl) return;
+        
+        try {
+            googleSheetSync.setSettings(data.settings);
+            await googleSheetSync.trackActivity(
+                action,
+                'Students',
+                student.id,
+                student.name,
+                `${student.grade} - ${student.stream || 'No Stream'} | ${student.admissionNo || 'No Adm No.'}`,
+                oldData,
+                student
+            );
+        } catch (err) {
+            console.warn('Activity tracking failed:', err.message);
+        }
+    };
 
     // Reset to page 1 when data changes
     useEffect(() => {
@@ -110,7 +130,12 @@ export const Students = ({ data, setData, onSelectStudent }) => {
         if (editingId) {
             // Filter out hidden fees before saving
             const filteredStudent = { ...newStudent, id: editingId, selectedFees: filterHiddenFees(newStudent.selectedFees) };
+            const oldStudent = data.students.find(s => s.id === editingId);
             const updated = data.students.map(s => s.id === editingId ? filteredStudent : s);
+            
+            // Track activity
+            trackActivity('EDIT', filteredStudent, oldStudent);
+            
             setData({ ...data, students: updated });
             setEditingId(null);
 
@@ -130,6 +155,10 @@ export const Students = ({ data, setData, onSelectStudent }) => {
             const id = Date.now().toString();
             // Filter out hidden fees before saving
             const newStudentWithId = { ...newStudent, id, selectedFees: filterHiddenFees(newStudent.selectedFees) };
+            
+            // Track activity
+            trackActivity('ADD', newStudentWithId);
+            
             setData({ ...data, students: [...(data.students || []), newStudentWithId] });
 
             // Sync to Google Sheet
@@ -209,6 +238,9 @@ export const Students = ({ data, setData, onSelectStudent }) => {
 
         if (!confirm(`Delete ${student.name}? This will remove them from local data and Google Sheet.`)) return;
 
+        // Track activity before deleting
+        trackActivity('DELETE', student);
+        
         // Delete assessments for this student locally first
         const updatedAssessments = (data.assessments || []).filter(a => String(a.studentId) !== String(id));
         
