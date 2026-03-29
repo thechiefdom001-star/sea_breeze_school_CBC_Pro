@@ -28,14 +28,30 @@ function getGradeStreamOptions(grades, streams) {
 export const Marklist = ({ data = {}, setData = () => { }, isAdmin, teacherSession, allowedSubjects = [], allowedGrades = [], allowedReligion = '' }) => {
     const settings = data?.settings || {};
     const allGrades = safeArray(settings.grades);
-    const grades = isAdmin ? allGrades : allGrades.filter(g => allowedGrades.some(ag => g.toLowerCase().includes(ag) || ag.includes(g.toLowerCase())));
+    
+    // Teachers: ONLY show grades they're assigned to (case-insensitive)
+    const grades = isAdmin ? allGrades : allGrades.filter(g => {
+        const allowedLower = allowedGrades.map(ag => ag.toLowerCase());
+        return allowedLower.some(ag => g.toLowerCase().includes(ag) || ag.includes(g.toLowerCase()));
+    });
+
+    // Show no access message if teacher has no grades
+    if (!isAdmin && grades.length === 0) {
+        return html`
+            <div class="p-8 text-center">
+                <div class="text-4xl mb-4">🔒</div>
+                <h2 class="text-xl font-bold text-slate-700 mb-2">No Access Assigned</h2>
+                <p class="text-slate-500">You have not been assigned any grades to view.</p>
+            </div>
+        `;
+    }
 
     const streams = safeArray(settings.streams);
     const studentsList = safeArray(data?.students);
     const assessmentsList = safeArray(data?.assessments);
     const remarksList = safeArray(data?.remarks);
 
-    const gradeStreamOptions = getGradeStreamOptions(grades.length > 0 ? grades : ['-- No Assigned Grades --'], streams);
+    const gradeStreamOptions = getGradeStreamOptions(grades, streams);
     const defaultGradeStream = gradeStreamOptions.length > 0 ? gradeStreamOptions[0].value : 'GRADE 1';
     const [selectedGradeStream, setSelectedGradeStream] = useState(defaultGradeStream);
     const [selectedTerm, setSelectedTerm] = useState('T1');
@@ -190,7 +206,15 @@ export const Marklist = ({ data = {}, setData = () => { }, isAdmin, teacherSessi
                 a.examType === selectedExamType &&
                 a.academicYear === academicYear
             );
-            const score = assessment ? Number(assessment.score) : null;
+            // Calculate score from rawScore and maxScore if available
+            let score = null;
+            if (assessment) {
+                if (assessment.score !== undefined) {
+                    score = Number(assessment.score);
+                } else if (assessment.rawScore !== undefined && assessment.maxScore) {
+                    score = Math.round((Number(assessment.rawScore) / Number(assessment.maxScore)) * 100);
+                }
+            }
             const gradeInfo = score !== null ? Storage.getGradeInfo(score) : null;
 
             return html`

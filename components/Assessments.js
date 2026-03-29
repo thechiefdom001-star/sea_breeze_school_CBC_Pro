@@ -8,11 +8,63 @@ import { PrintButtons } from './PrintButtons.js';
 const html = htm.bind(h);
 
 export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSubjects = [], allowedGrades = [], allowedReligion = '' }) => {
-    const allGrades = data?.settings?.grades || [];
-    const availableGrades = isAdmin ? allGrades : allGrades.filter(g => allowedGrades.some(ag => g.toLowerCase().includes(ag) || ag.includes(g.toLowerCase())));
-    const gradesToUse = availableGrades.length > 0 ? availableGrades : ['-- No Assigned Grades --'];
-
-    const [selectedGrade, setSelectedGrade] = useState(gradesToUse[0] || 'GRADE 1');
+    const allSettingsGrades = data?.settings?.grades || [];
+    
+    // FOR TEACHERS: Only show their assigned grades - filter with case-insensitive matching
+    let availableGrades;
+    if (isAdmin) {
+        // Admin sees all grades
+        availableGrades = allSettingsGrades;
+    } else {
+        // Teacher: ONLY show grades they're assigned to (case-insensitive)
+        const allowedLower = allowedGrades.map(g => g.toLowerCase());
+        availableGrades = allSettingsGrades.filter(g => 
+            allowedLower.some(ag => g.toLowerCase().includes(ag) || ag.includes(g.toLowerCase()))
+        );
+    }
+    
+    const gradesToUse = availableGrades.length > 0 ? availableGrades : [];
+    
+    // Show message if teacher has no grades assigned
+    const hasNoAccess = !isAdmin && gradesToUse.length === 0;
+    
+    // Show access denied message for teachers with no grades
+    if (hasNoAccess) {
+        return html`
+            <div class="p-8 text-center">
+                <div class="text-4xl mb-4">🔒</div>
+                <h2 class="text-xl font-bold text-slate-700 mb-2">No Access Assigned</h2>
+                <p class="text-slate-500 mb-4">You have not been assigned any grades or subjects to manage.</p>
+                <p class="text-sm text-slate-400">Please contact the administrator to assign your teaching subjects and grades.</p>
+            </div>
+        `;
+    }
+    
+    // Helper to check if user can access a specific grade
+    const canAccessGrade = (grade) => {
+        if (isAdmin) return true;
+        return availableGrades.includes(grade);
+    };
+    
+    // Helper to check if user can access a specific subject
+    const canAccessSubject = (subject) => {
+        if (isAdmin) return true;
+        if (!subject || !allowedSubjects.length) return false;
+        const subjectLower = subject.toLowerCase();
+        return allowedSubjects.some(as => subjectLower.includes(as.toLowerCase()) || as.toLowerCase().includes(subjectLower));
+    };
+    
+    // Helper function to find student for assessment
+    const findStudentForAssessment = (assessment) => {
+        if (!assessment) return null;
+        return (data.students || []).find(s => 
+            String(s.id) === String(assessment.studentId) ||
+            String(s.admissionNo) === String(assessment.studentId) ||
+            s.admissionNo === assessment.studentAdmissionNo
+        );
+    };
+    
+    const [selectedGrade, setSelectedGrade] = useState('');
     const [selectedStream, setSelectedStream] = useState('ALL');
     const [selectedSubject, setSelectedSubject] = useState('');
     const [selectedTerm, setSelectedTerm] = useState('T1');
@@ -23,95 +75,77 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
     const [historySearchTerm, setHistorySearchTerm] = useState('');
     const [examTotal, setExamTotal] = useState(100);
 
+    // Auto-select first available grade on mount or when grades change
+    const [initialGradeSet, setInitialGradeSet] = useState(false);
+    useEffect(() => {
+        if (!initialGradeSet && gradesToUse.length > 0 && !selectedGrade) {
+            console.log('Auto-selecting grade:', gradesToUse[0]);
+            setSelectedGrade(gradesToUse[0]);
+            setInitialGradeSet(true);
+        }
+    }, [gradesToUse, initialGradeSet, selectedGrade]);
+
     const streams = data?.settings?.streams || [];
-    const allSubjects = Storage.getSubjectsForGrade(selectedGrade);
-    const availableSubjects = isAdmin ? allSubjects : allSubjects.filter(s => {
-        const matchesPermission = allowedSubjects.some(as => s.toLowerCase().includes(as) || as.includes(s.toLowerCase()));
-        if (!allowedReligion) return matchesPermission;
-        if (s.toUpperCase().includes('CRE')) return allowedReligion === 'christian' && matchesPermission;
-        if (s.toUpperCase().includes('IRE')) return allowedReligion === 'islam' && matchesPermission;
-        if (s.toUpperCase().includes('HRE')) return allowedReligion === 'hindu' && matchesPermission;
-        return matchesPermission;
+    
+    // Get subjects ONLY for the selected grade
+    const allSubjects = selectedGrade ? Storage.getSubjectsForGrade(selectedGrade) : [];
+    
+    // FOR TEACHERS: Only show their assigned subjects for their grades
+    let availableSubjects;
+    if (isAdmin) {
+        // Admin sees all subjects
+        availableSubjects = allSubjects;
+    } else if (selectedGrade) {
+        // Teacher: Show subjects they're assigned to for this grade, plus all grade subjects as fallback
+        const teacherLower = allowedSubjects.map(s => s.toLowerCase());
+        const teacherSubjects = allSubjects.filter(s => 
+            teacherLower.some(as => s.toLowerCase().includes(as) || as.includes(s.toLowerCase()))
+        );
+        // If teacher has assigned subjects, use those; otherwise use all grade subjects
+        availableSubjects = teacherSubjects.length > 0 ? teacherSubjects : allSubjects;
+    } else {
+        availableSubjects = [];
+    }
+    
+    // Filter by religion if needed
+    availableSubjects = availableSubjects.filter(s => {
+        if (!allowedReligion) return true;
+        if (s.toUpperCase().includes('CRE')) return allowedReligion === 'christian';
+        if (s.toUpperCase().includes('IRE')) return allowedReligion === 'islam';
+        if (s.toUpperCase().includes('HRE')) return allowedReligion === 'hindu';
+        return true;
     });
-    const subjects = availableSubjects.length > 0 ? availableSubjects : ['-- No Assigned Subjects --'];
-
-    // Track activity helper
-    const trackActivity = async (action, assessment, oldData = null) => {
-        if (!data.settings?.googleScriptUrl) return;
-        
-        try {
-            googleSheetSync.setSettings(data.settings);
-            const student = data.students?.find(s => String(s.id) === String(assessment.studentId));
-            
-            await googleSheetSync.trackActivity(
-                action,
-                'Assessments',
-                assessment.id,
-                student?.name || assessment.studentName || 'Unknown Student',
-                `${assessment.subject} - ${assessment.term} ${assessment.examType}: Score ${assessment.score}`,
-                oldData,
-                assessment
-            );
-        } catch (err) {
-            console.warn('Activity tracking failed:', err.message);
+    
+    const subjects = availableSubjects.length > 0 ? availableSubjects : [];
+    
+    // Auto-select first subject when grade changes, OR show message if no subjects
+    useEffect(() => {
+        if (selectedGrade && subjects.length > 0 && !selectedSubject) {
+            setSelectedSubject(subjects[0]);
+        } else if (selectedGrade && subjects.length === 0) {
+            setSelectedSubject('');
         }
-    };
-
-    // Create a robust student lookup map - rebuild when data.students changes
-    const studentLookup = useMemo(() => {
-        const map = new Map();
-        if (data?.students) {
-            data.students.forEach(s => {
-                // Key by ID (both string and number variants)
-                map.set(String(s.id), s);
-                map.set(String(Number(s.id)), s);
-                // Also key by admissionNo for Google Sheet data matching
-                if (s.admissionNo) {
-                    map.set(String(s.admissionNo).toLowerCase().trim(), s);
-                    map.set(String(s.admissionNo).toUpperCase().trim(), s);
-                }
-            });
-        }
-        return map;
-    }, [data?.students]);
-
-    // Helper function to find student for an assessment
-    const findStudentForAssessment = (assessment) => {
-        // Try various ID formats
-        let student = studentLookup.get(String(assessment.studentId));
-        if (student) return student;
-        
-        student = studentLookup.get(String(Number(assessment.studentId)));
-        if (student) return student;
-        
-        // Try matching by admissionNo stored in assessment (if synced from another device)
-        if (assessment.studentAdmissionNo) {
-            student = studentLookup.get(String(assessment.studentAdmissionNo).toLowerCase().trim());
-            if (student) return student;
-            student = studentLookup.get(String(assessment.studentAdmissionNo).toUpperCase().trim());
-            if (student) return student;
-        }
-        
-        // Try matching by studentName if available
-        if (assessment.studentName) {
-            const nameLower = assessment.studentName.toLowerCase().trim();
-            student = data?.students?.find(s => 
-                s.name && s.name.toLowerCase().trim() === nameLower
-            );
-            if (student) return student;
-        }
-        
-        return null;
-    };
+    }, [selectedGrade, subjects]);
 
     useEffect(() => {
-        if (!subjects.includes(selectedSubject)) {
-            setSelectedSubject(subjects[0]);
+        const academicYear = data.settings?.academicYear || '2025/2026';
+        const matchingAssessments = (data.assessments || []).filter(a =>
+            a.grade === selectedGrade &&
+            a.subject === selectedSubject &&
+            a.term === selectedTerm &&
+            a.examType === selectedExamType &&
+            a.academicYear === academicYear
+        );
+
+        const storedMaxScore = matchingAssessments.find(a => Number(a.maxScore) > 0)?.maxScore;
+        if (storedMaxScore && Number(storedMaxScore) !== Number(examTotal)) {
+            setExamTotal(Number(storedMaxScore));
         }
-    }, [selectedGrade]);
+    }, [data.assessments, data.settings?.academicYear, examTotal, selectedExamType, selectedGrade, selectedSubject, selectedTerm]);
     
     const filteredStudents = (data?.students || []).filter(s => {
-        const inGrade = s.grade === selectedGrade;
+        // Case-insensitive grade matching
+        const inGrade = selectedGrade && s.grade && (s.grade.toLowerCase() === selectedGrade.toLowerCase() || s.grade === selectedGrade);
         if (!inGrade) return false;
         
         const inStream = selectedStream === 'ALL' || s.stream === selectedStream;
@@ -122,7 +156,7 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
             (s.admissionNo && s.admissionNo.toLowerCase().includes(searchTerm.toLowerCase()));
         if (!matchesSearch) return false;
 
-        const matchesReligion = !allowedReligion || (s.religion && s.religion.toLowerCase() === allowedReligion.toLowerCase());
+        const matchesReligion = !allowedReligion || !s.religion || (s.religion && s.religion.toLowerCase() === allowedReligion.toLowerCase());
         if (!matchesReligion) return false;
         
         // For Senior School, filter students by their chosen electives
@@ -139,40 +173,57 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
         const studentIdStr = String(studentId);
         const academicYear = data.settings?.academicYear || '2025/2026';
         
+        // Find existing assessment with better matching
         const existing = data.assessments.find(a => 
-            String(a.studentId) === studentIdStr && 
+            (String(a.studentId) === studentIdStr || String(a.studentId) === String(studentId)) && 
             a.subject === selectedSubject && 
             a.term === selectedTerm && 
             a.examType === selectedExamType &&
             a.academicYear === academicYear
         );
+        
+        // Remove existing and keep other assessments
         const otherAssessments = data.assessments.filter(a => 
-            !(String(a.studentId) === studentIdStr && a.subject === selectedSubject && a.term === selectedTerm && a.examType === selectedExamType && a.academicYear === academicYear)
+            !((String(a.studentId) === studentIdStr || String(a.studentId) === String(studentId)) && a.subject === selectedSubject && a.term === selectedTerm && a.examType === selectedExamType && a.academicYear === academicYear)
         );
         
-        let level = existing?.level || 'ME2';
-        let score = existing?.score || 0;
-        let rawScore = existing?.rawScore || score;
-        let maxScore = existing?.maxScore || 100;
+        // Get student's actual grade from data
+        const student = (data.students || []).find(s => String(s.id) === studentIdStr || s.admissionNo === studentIdStr);
+        const studentGrade = student?.grade || selectedGrade;
+        
+        // Calculate based on current examTotal
+        const currentMaxScore = Number(examTotal) || 100;
+        let maxScore = currentMaxScore;
+        
+        let level = 'ME2';
+        let score = 0;
+        let rawScore = 0;
 
         if (field === 'score') {
-            score = Number(value);
-            rawScore = score;
-            maxScore = 100;
+            // User enters percentage directly (0-100)
+            score = Math.min(100, Math.max(0, Number(value)));
+            rawScore = Math.round((score / 100) * currentMaxScore);
             level = Storage.getGradeInfo(score).level;
         } else if (field === 'rawScore') {
-            rawScore = Number(value);
-            maxScore = Number(examTotal) || 100;
-            score = Math.round((rawScore / maxScore) * 100);
+            // User enters raw marks - convert to percentage
+            rawScore = Math.min(currentMaxScore, Math.max(0, Number(value)));
+            score = Math.round((rawScore / currentMaxScore) * 100);
             level = Storage.getGradeInfo(score).level;
         } else if (field === 'level') {
             level = value;
+            // Also calculate score from existing rawScore if available
+            if (existing?.rawScore !== undefined) {
+                rawScore = existing.rawScore;
+                score = Math.round((rawScore / currentMaxScore) * 100);
+            }
         }
 
         const newAssessment = {
             id: existing?.id || ('A-' + Date.now() + Math.random().toString().slice(2, 6)),
             studentId: studentIdStr,
-            grade: selectedGrade,
+            studentAdmissionNo: student?.admissionNo || '',
+            studentName: student?.name || '',
+            grade: studentGrade,
             subject: selectedSubject,
             term: selectedTerm,
             examType: selectedExamType,
@@ -186,12 +237,11 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
         
         // Track activity
         const action = existing ? 'EDIT' : 'ADD';
-        trackActivity(action, newAssessment, existing);
         
         // 1. SAVE LOCALLY FIRST
         const updatedAssessments = [...otherAssessments, newAssessment];
         setData({ ...data, assessments: updatedAssessments });
-        console.log('✓ Assessment saved locally:', newAssessment.id, '- Subject:', newAssessment.subject);
+        console.log('✓ Assessment saved:', newAssessment.id, '- Grade:', newAssessment.grade, '- Subject:', newAssessment.subject, '- Score:', newAssessment.score, '- Term:', newAssessment.term);
         
         // 2. SYNC TO GOOGLE SHEET (fire and forget, don't block)
         if (data.settings?.googleScriptUrl) {
@@ -294,11 +344,6 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
         const assessmentToDelete = data.assessments.find(a => a.id === assessmentId);
         const updatedAssessments = data.assessments.filter(a => a.id !== assessmentId);
         
-        // Track activity before deleting
-        if (assessmentToDelete) {
-            trackActivity('DELETE', assessmentToDelete);
-        }
-        
         setData({ ...data, assessments: updatedAssessments });
         
         // Delete from Google Sheet
@@ -370,13 +415,23 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
                     // Normalize the remote assessment
                     const normalizedRemote = {
                         ...remote,
+                        score: Number(remote.score),
+                        rawScore: remote.rawScore !== undefined && remote.rawScore !== '' ? Number(remote.rawScore) : undefined,
+                        maxScore: remote.maxScore !== undefined && remote.maxScore !== '' ? Number(remote.maxScore) : 100,
                         studentId: String(remote.studentId || ''),
                         studentAdmissionNo: remote.studentAdmissionNo || '',
                         studentName: remote.studentName || ''
                     };
+
+                    if (!Number.isFinite(normalizedRemote.score)) {
+                        return;
+                    }
+                    if (!Number.isFinite(normalizedRemote.rawScore) && Number.isFinite(normalizedRemote.score)) {
+                        normalizedRemote.rawScore = Math.round((normalizedRemote.score / 100) * normalizedRemote.maxScore);
+                    }
                     
                     // Check if this assessment already exists locally
-                    const exists = mergedAssessments.some(a => 
+                    const existingIndex = mergedAssessments.findIndex(a => 
                         a.id === normalizedRemote.id ||
                         // Match by composite key with flexible ID matching
                         ((
@@ -389,55 +444,60 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
                          a.examType === normalizedRemote.examType &&
                          a.academicYear === normalizedRemote.academicYear)
                     );
-                    if (!exists) {
-                        // Try to match with local students using multiple strategies
-                        let matchedStudent = null;
-                        
-                        // Strategy 1: Match by studentId
-                        if (normalizedRemote.studentId) {
-                            matchedStudent = localStudents.find(s => 
-                                String(s.id) === normalizedRemote.studentId ||
-                                String(s.id) === String(Number(normalizedRemote.studentId))
-                            );
+                    
+                    // Try to match with local students using multiple strategies
+                    let matchedStudent = null;
+                    
+                    // Strategy 1: Match by studentId
+                    if (normalizedRemote.studentId) {
+                        matchedStudent = localStudents.find(s => 
+                            String(s.id) === normalizedRemote.studentId ||
+                            String(s.id) === String(Number(normalizedRemote.studentId))
+                        );
+                    }
+                    
+                    // Strategy 2: Match by admission number
+                    if (!matchedStudent && normalizedRemote.studentAdmissionNo) {
+                        matchedStudent = localStudents.find(s => 
+                            s.admissionNo && 
+                            String(s.admissionNo).toLowerCase() === normalizedRemote.studentAdmissionNo.toLowerCase()
+                        );
+                    }
+                    
+                    // Strategy 3: Match by name
+                    if (!matchedStudent && normalizedRemote.studentName) {
+                        matchedStudent = localStudents.find(s => 
+                            s.name && 
+                            s.name.toLowerCase().trim() === normalizedRemote.studentName.toLowerCase().trim()
+                        );
+                    }
+                    
+                    // Strategy 4: Match by grade + subject + term + exam (if studentId is empty but other data matches)
+                    if (!matchedStudent && !normalizedRemote.studentId && !normalizedRemote.studentAdmissionNo) {
+                        const existingByMatch = mergedAssessments.find(a =>
+                            a.subject === normalizedRemote.subject &&
+                            a.term === normalizedRemote.term &&
+                            a.examType === normalizedRemote.examType &&
+                            a.academicYear === normalizedRemote.academicYear
+                        );
+                        if (existingByMatch) {
+                            normalizedRemote.studentId = existingByMatch.studentId;
+                            normalizedRemote.studentAdmissionNo = existingByMatch.studentAdmissionNo || '';
                         }
-                        
-                        // Strategy 2: Match by admission number
-                        if (!matchedStudent && normalizedRemote.studentAdmissionNo) {
-                            matchedStudent = localStudents.find(s => 
-                                s.admissionNo && 
-                                String(s.admissionNo).toLowerCase() === normalizedRemote.studentAdmissionNo.toLowerCase()
-                            );
-                        }
-                        
-                        // Strategy 3: Match by name
-                        if (!matchedStudent && normalizedRemote.studentName) {
-                            matchedStudent = localStudents.find(s => 
-                                s.name && 
-                                s.name.toLowerCase().trim() === normalizedRemote.studentName.toLowerCase().trim()
-                            );
-                        }
-                        
-                        // Strategy 4: Match by grade + subject + term + exam (if studentId is empty but other data matches)
-                        if (!matchedStudent && !normalizedRemote.studentId && !normalizedRemote.studentAdmissionNo) {
-                            // Try to find by exact match on other fields
-                            const existingByMatch = mergedAssessments.find(a =>
-                                a.subject === normalizedRemote.subject &&
-                                a.term === normalizedRemote.term &&
-                                a.examType === normalizedRemote.examType &&
-                                a.academicYear === normalizedRemote.academicYear
-                            );
-                            if (existingByMatch) {
-                                normalizedRemote.studentId = existingByMatch.studentId;
-                                normalizedRemote.studentAdmissionNo = existingByMatch.studentAdmissionNo || '';
-                            }
-                        }
-                        
-                        mergedAssessments.push({
-                            ...normalizedRemote,
-                            studentId: matchedStudent?.id || normalizedRemote.studentId || '',
-                            studentAdmissionNo: matchedStudent?.admissionNo || normalizedRemote.studentAdmissionNo || '',
-                            studentName: matchedStudent?.name || normalizedRemote.studentName || 'Unknown'
-                        });
+                    }
+
+                    const mergedAssessment = {
+                        ...(existingIndex >= 0 ? mergedAssessments[existingIndex] : {}),
+                        ...normalizedRemote,
+                        studentId: matchedStudent?.id || normalizedRemote.studentId || '',
+                        studentAdmissionNo: matchedStudent?.admissionNo || normalizedRemote.studentAdmissionNo || '',
+                        studentName: matchedStudent?.name || normalizedRemote.studentName || 'Unknown'
+                    };
+
+                    if (existingIndex >= 0) {
+                        mergedAssessments[existingIndex] = mergedAssessment;
+                    } else {
+                        mergedAssessments.push(mergedAssessment);
                         addedCount++;
                     }
                 });
@@ -608,7 +668,8 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
                                  a.studentAdmissionNo === student.admissionNo) && 
                                 a.subject === selectedSubject && 
                                 a.term === selectedTerm && 
-                                a.examType === selectedExamType
+                                a.examType === selectedExamType &&
+                                a.academicYear === (data.settings?.academicYear || '2025/2026')
                             );
                             return html`
                                 <div key=${student.id} class="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -623,12 +684,13 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
                                                 <input 
                                                     type="number" 
                                                     min="0"
-                                                    value=${assessment?.rawScore !== undefined ? assessment.rawScore : (assessment?.score || '')}
+                                                    max=${examTotal}
+                                                    value=${assessment?.rawScore !== undefined ? assessment.rawScore : (assessment?.score !== undefined ? Math.round((assessment.score / 100) * examTotal) : '')}
                                                     onBlur=${(e) => updateAssessment(student.id, 'rawScore', e.target.value)}
                                                     class="w-16 p-2 bg-slate-50 border border-slate-100 rounded text-center font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                                    placeholder="Raw"
+                                                    placeholder={"0/" + examTotal}
                                                 />
-                                                ${assessment?.score !== undefined && examTotal != 100 && html`
+                                                ${assessment?.score !== undefined && html`
                                                     <div class="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded shadow whitespace-nowrap z-10">
                                                         ${assessment.score}%
                                                     </div>
@@ -685,20 +747,27 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
                     </div>
                 </div>
                 
-                <div class="assessments-container overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="bg-slate-50 border-b border-slate-200">
-                                <th class="px-4 py-2 text-left font-bold text-slate-600">Student Name</th>
-                                <th class="px-4 py-2 text-left font-bold text-slate-600">Subject</th>
-                                <th class="px-4 py-2 text-left font-bold text-slate-600">Term</th>
-                                <th class="px-4 py-2 text-left font-bold text-slate-600">Exam Type</th>
-                                <th class="px-4 py-2 text-center font-bold text-slate-600">Score</th>
-                                <th class="px-4 py-2 text-center font-bold text-slate-600">Level</th>
-                                <th class="px-4 py-2 text-center font-bold text-slate-600">Action</th>
+                <div class="print-only mb-6 flex flex-col items-center text-center">
+                    <img src="${data.settings.schoolLogo || ''}" class="w-16 h-16 mb-2 object-contain" alt="Logo" />
+                    <h1 class="text-2xl font-black uppercase">${data.settings.schoolName || 'School'}</h1>
+                    <h2 class="text-sm font-bold uppercase text-slate-500 mt-1">Assessment Records</h2>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase mt-1">${data.settings.academicYear || ''}</p>
+                </div>
+
+                <div class="assessments-container bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
+                    <table class="w-full text-left min-w-[920px] assessment-records-table">
+                        <thead class="bg-slate-50 border-b border-slate-100">
+                            <tr>
+                                <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Student Name</th>
+                                <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Subject</th>
+                                <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Term</th>
+                                <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">Exam Type</th>
+                                <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase text-center">Score</th>
+                                <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase text-center">Level</th>
+                                <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase text-center no-print">Action</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100">
+                        <tbody class="divide-y divide-slate-50">
                             ${data.assessments
                                 .filter(a => {
                                     if (!historySearchTerm) return true;
@@ -726,13 +795,16 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
                                     .slice().reverse().map(assessment => {
                                         const student = findStudentForAssessment(assessment);
                                         return html`
-                                            <tr key=${assessment.id} class="hover:bg-blue-50">
-                                                <td class="px-4 py-3">${student?.name || assessment.studentName || 'Unknown'}</td>
-                                                <td class="px-4 py-3">${assessment.subject}</td>
-                                                <td class="px-4 py-3">${assessment.term}</td>
-                                                <td class="px-4 py-3">${assessment.examType}</td>
-                                                <td class="px-4 py-3 text-center font-bold">
-                                                    <div class="flex flex-col items-center">
+                                            <tr key=${assessment.id} class="hover:bg-slate-100 transition-colors even:bg-slate-50">
+                                                <td class="px-6 py-4">
+                                                    <div class="font-bold text-sm text-slate-800">${student?.name || assessment.studentName || 'Unknown'}</div>
+                                                    <div class="text-[10px] text-slate-400 uppercase">${student?.admissionNo || assessment.studentAdmissionNo || '-'}</div>
+                                                </td>
+                                                <td class="px-6 py-4 text-slate-600 text-sm font-medium">${assessment.subject}</td>
+                                                <td class="px-6 py-4 text-slate-500 text-xs font-bold uppercase">${assessment.term}</td>
+                                                <td class="px-6 py-4 text-slate-500 text-xs font-bold uppercase">${assessment.examType}</td>
+                                                <td class="px-6 py-4 text-center font-bold">
+                                                    <div class="flex flex-col items-center gap-1">
                                                         <input 
                                                             type="number" 
                                                             min="0" 
@@ -757,21 +829,24 @@ export const Assessments = ({ data, setData, isAdmin, teacherSession, allowedSub
                                                                     syncToGoogleSilent(updated).catch(() => {});
                                                                 }
                                                             }}
-                                                            class="w-12 p-1 text-center bg-white border border-slate-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                                                            class="w-14 p-1.5 text-center bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 no-print font-bold text-sm"
                                                         />
+                                                        <span class="hidden print:block text-[11px] font-black text-slate-700">
+                                                            ${assessment.rawScore !== undefined ? assessment.rawScore : assessment.score}${assessment.maxScore ? ` / ${assessment.maxScore}` : ''}${assessment.score !== undefined ? ` (${assessment.score}%)` : ''}
+                                                        </span>
                                                         ${assessment.maxScore && assessment.maxScore != 100 && html`
-                                                            <span class="text-[9px] text-slate-400">/ ${assessment.maxScore} (${assessment.score}%)</span>
+                                                            <span class="text-[9px] text-slate-400 no-print">/ ${assessment.maxScore} (${assessment.score}%)</span>
                                                         `}
                                                     </div>
                                                 </td>
-                                                <td class="px-4 py-3 text-center">
-                                                    <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold">${assessment.level}</span>
+                                                <td class="px-6 py-4 text-center">
+                                                    <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold uppercase">${assessment.level}</span>
                                                 </td>
-                                                <td class="px-4 py-3 text-center">
+                                                <td class="px-6 py-4 text-center no-print">
                                                     <button 
                                                         onClick=${() => deleteAssessment(assessment.id)}
                                                         title="Delete assessment"
-                                                        class="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-bold"
+                                                        class="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-[10px] font-bold uppercase"
                                                     >
                                                         Delete
                                                     </button>

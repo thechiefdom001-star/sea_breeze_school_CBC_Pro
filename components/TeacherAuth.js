@@ -5,7 +5,37 @@ import { googleSheetSync } from '../lib/googleSheetSync.js';
 
 const html = htm.bind(h);
 
-export const TeacherAuth = ({ settings, onLogin, onClose }) => {
+const normalizeList = (value) => {
+    if (!value) return '';
+
+    const seen = new Set();
+    return String(value)
+        .split(',')
+        .map(item => item.trim())
+        .filter(item => {
+            const normalized = item.toLowerCase();
+            if (!normalized || seen.has(normalized)) return false;
+            seen.add(normalized);
+            return true;
+        })
+        .join(', ');
+};
+
+const buildTeacherSyncPayload = (teacher) => ({
+    id: teacher.id,
+    name: teacher.name || '',
+    contact: teacher.contact || '',
+    subjects: teacher.subjects || '',
+    grades: teacher.grades || '',
+    employeeNo: teacher.employeeNo || '',
+    nssfNo: teacher.nssfNo || '',
+    shifNo: teacher.shifNo || '',
+    taxNo: teacher.taxNo || '',
+    isClassTeacher: !!teacher.isClassTeacher,
+    classTeacherGrade: teacher.classTeacherGrade || ''
+});
+
+export const TeacherAuth = ({ settings, data = {}, setData = () => {}, onLogin, onClose }) => {
     const [mode, setMode] = useState('login');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -20,12 +50,135 @@ export const TeacherAuth = ({ settings, onLogin, onClose }) => {
     const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    
+    // Grade-based subjects mapping
+    const gradeSubjects = {
+        'PP1': ['Mathematics activities', 'Language activities', 'Literacy', 'Kiswahili', 'Environmental Activities', 'Creative Activities', 'Religious Education Activities'],
+        'PP2': ['Mathematics activities', 'Language activities', 'Literacy', 'Kiswahili', 'Environmental Activities', 'Creative Activities', 'Religious Education Activities'],
+        'GRADE 1': ['INDIGENOUS LANGUAGE ACTIVITIES', 'KISWAHILI/KSL ACTIVITIES', 'ENGLISH LANGUAGE ACTIVITIES', 'MATHEMATIC ACTIVITIES', 'RELIGIOUS EDUCATION ACTIVITIES', 'ENVIRONMENTAL ACTIVITIES', 'CREATIVE ART ACTIVITIES'],
+        'GRADE 2': ['INDIGENOUS LANGUAGE ACTIVITIES', 'KISWAHILI/KSL ACTIVITIES', 'ENGLISH LANGUAGE ACTIVITIES', 'MATHEMATIC ACTIVITIES', 'RELIGIOUS EDUCATION ACTIVITIES', 'ENVIRONMENTAL ACTIVITIES', 'CREATIVE ART ACTIVITIES'],
+        'GRADE 3': ['INDIGENOUS LANGUAGE ACTIVITIES', 'KISWAHILI/KSL ACTIVITIES', 'ENGLISH LANGUAGE ACTIVITIES', 'MATHEMATIC ACTIVITIES', 'RELIGIOUS EDUCATION ACTIVITIES', 'ENVIRONMENTAL ACTIVITIES', 'CREATIVE ART ACTIVITIES'],
+        'GRADE 4': ['ENGLISH', 'KISWAHILI/KSL', 'MATHEMATICS', 'AGRICULTURE', 'SOCIAL STUDIES', 'RELIGIOUS EDUCATION', 'CREATIVE ARTS', 'SCIENCE & TECHNOLOGY'],
+        'GRADE 5': ['ENGLISH', 'KISWAHILI/KSL', 'MATHEMATICS', 'AGRICULTURE', 'SOCIAL STUDIES', 'RELIGIOUS EDUCATION', 'CREATIVE ARTS', 'SCIENCE & TECHNOLOGY'],
+        'GRADE 6': ['ENGLISH', 'KISWAHILI/KSL', 'MATHEMATICS', 'AGRICULTURE', 'SOCIAL STUDIES', 'RELIGIOUS EDUCATION', 'CREATIVE ARTS', 'SCIENCE & TECHNOLOGY'],
+        'GRADE 7': ['ENGLISH', 'MATHEMATICS', 'KISWAHILI/KSL', 'SOCIAL STUDIES', 'PRE-TECHNICAL STUDIES', 'CREATIVE ARTS & SPORTS', 'AGRICULTURE & NUTRITION', 'INTEGRATED SCIENCE', 'RELIGIOUS EDUCATION'],
+        'GRADE 8': ['ENGLISH', 'MATHEMATICS', 'KISWAHILI/KSL', 'SOCIAL STUDIES', 'PRE-TECHNICAL STUDIES', 'CREATIVE ARTS & SPORTS', 'AGRICULTURE & NUTRITION', 'INTEGRATED SCIENCE', 'RELIGIOUS EDUCATION'],
+        'GRADE 9': ['ENGLISH', 'MATHEMATICS', 'KISWAHILI/KSL', 'SOCIAL STUDIES', 'PRE-TECHNICAL STUDIES', 'CREATIVE ARTS & SPORTS', 'AGRICULTURE & NUTRITION', 'INTEGRATED SCIENCE', 'RELIGIOUS EDUCATION'],
+        'GRADE 10': ['English', 'Kiswahili', 'Mathematics', 'CSL', 'Biology', 'Chemistry', 'Physics', 'Agriculture', 'Computer Studies', 'History and Citizenship', 'Geography', 'CRE', 'IRE', 'Accounting', 'Economics', 'Fine Arts', 'Music and Dance', 'Sports Science', 'Business Studies'],
+        'GRADE 11': ['English', 'Kiswahili', 'Mathematics', 'CSL', 'Biology', 'Chemistry', 'Physics', 'Agriculture', 'Computer Studies', 'History and Citizenship', 'Geography', 'CRE', 'IRE', 'Accounting', 'Economics', 'Fine Arts', 'Music and Dance', 'Sports Science', 'Business Studies'],
+        'GRADE 12': ['English', 'Kiswahili', 'Mathematics', 'CSL', 'Biology', 'Chemistry', 'Physics', 'Agriculture', 'Computer Studies', 'History and Citizenship', 'Geography', 'CRE', 'IRE', 'Accounting', 'Economics', 'Fine Arts', 'Music and Dance', 'Sports Science', 'Business Studies']
+    };
+    
+    const allGrades = ['PP1', 'PP2', 'GRADE 1', 'GRADE 2', 'GRADE 3', 'GRADE 4', 'GRADE 5', 'GRADE 6', 'GRADE 7', 'GRADE 8', 'GRADE 9', 'GRADE 10', 'GRADE 11', 'GRADE 12'];
+    
+    // Get available subjects based on selected grades
+    const getAvailableSubjects = () => {
+        const selectedGrades = grades.split(',').map(g => g.trim()).filter(g => g);
+        const availableSubjects = new Set();
+        
+        selectedGrades.forEach(grade => {
+            const normalizedGrade = allGrades.find(g => grade.toUpperCase() === g) || grade;
+            if (gradeSubjects[normalizedGrade]) {
+                gradeSubjects[normalizedGrade].forEach(s => availableSubjects.add(s));
+            }
+        });
+        
+        return Array.from(availableSubjects).sort();
+    };
+    
+    const availableSubjectList = grades ? getAvailableSubjects() : [];
 
     useEffect(() => {
         if (settings?.googleScriptUrl) {
             googleSheetSync.setSettings(settings);
         }
     }, [settings]);
+
+    const buildTeacherProfile = (teacherSeed = {}) => {
+        const normalizedUsername = (teacherSeed.username || '').trim().toLowerCase();
+        const normalizedName = (teacherSeed.name || teacherSeed.username || '').trim();
+        const normalizedSubjects = normalizeList(teacherSeed.subjects);
+        const normalizedGrades = normalizeList(teacherSeed.grades);
+        const normalizedClassTeacherGrade = (teacherSeed.classTeacherGrade || '').trim();
+        const normalizedReligion = (teacherSeed.religion || '').trim();
+        const normalizedRole = (teacherSeed.role || 'teacher').trim();
+        const currentTeachers = Array.isArray(data.teachers) ? data.teachers : [];
+
+        const existingTeacher = currentTeachers.find(teacher => {
+            const teacherUsername = (teacher.username || '').trim().toLowerCase();
+            const teacherName = (teacher.name || '').trim().toLowerCase();
+
+            return (
+                (normalizedUsername && teacherUsername === normalizedUsername) ||
+                (normalizedName && teacherName === normalizedName.toLowerCase())
+            );
+        });
+
+        return {
+            id: existingTeacher?.id || teacherSeed.teacherId || `T-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            username: normalizedUsername || existingTeacher?.username || '',
+            name: normalizedName || existingTeacher?.name || '',
+            contact: existingTeacher?.contact || '',
+            subjects: normalizedSubjects || existingTeacher?.subjects || '',
+            grades: normalizedGrades || existingTeacher?.grades || '',
+            employeeNo: existingTeacher?.employeeNo || '',
+            nssfNo: existingTeacher?.nssfNo || '',
+            shifNo: existingTeacher?.shifNo || '',
+            taxNo: existingTeacher?.taxNo || '',
+            isClassTeacher: normalizedRole === 'class_teacher',
+            classTeacherGrade: normalizedClassTeacherGrade || existingTeacher?.classTeacherGrade || '',
+            role: normalizedRole || existingTeacher?.role || 'teacher',
+            religion: normalizedReligion || existingTeacher?.religion || ''
+        };
+    };
+
+    const upsertTeacherProfile = async (teacherSeed = {}, { syncToGoogle = false } = {}) => {
+        const teacherProfile = buildTeacherProfile(teacherSeed);
+        const currentTeachers = Array.isArray(data.teachers) ? data.teachers : [];
+        const nextTeachers = (() => {
+            const existingIndex = currentTeachers.findIndex(teacher => String(teacher.id) === String(teacherProfile.id));
+            if (existingIndex >= 0) {
+                return currentTeachers.map(teacher => String(teacher.id) === String(teacherProfile.id) ? teacherProfile : teacher);
+            }
+            return [...currentTeachers, teacherProfile];
+        })();
+
+        setData(prev => ({
+            ...prev,
+            teachers: nextTeachers
+        }));
+
+        let syncResult = null;
+        if (syncToGoogle && settings?.googleScriptUrl) {
+            googleSheetSync.setSettings(settings);
+            syncResult = currentTeachers.some(teacher => String(teacher.id) === String(teacherProfile.id))
+                ? await googleSheetSync.updateTeacher(buildTeacherSyncPayload(teacherProfile))
+                : await googleSheetSync.pushTeacher(buildTeacherSyncPayload(teacherProfile));
+        }
+
+        return { teacherProfile, syncResult };
+    };
+
+    const saveTeacherCredentials = (teacherSeed = {}) => {
+        const normalizedUsername = (teacherSeed.username || '').trim().toLowerCase();
+        if (!normalizedUsername) return;
+
+        const existingCreds = JSON.parse(localStorage.getItem('et_teacher_credentials') || '[]');
+        const nextCreds = existingCreds.filter(cred => cred.username !== normalizedUsername);
+
+        nextCreds.push({
+            username: normalizedUsername,
+            password: teacherSeed.password || '',
+            name: (teacherSeed.name || teacherSeed.username || '').trim(),
+            role: teacherSeed.role || 'teacher',
+            subjects: normalizeList(teacherSeed.subjects),
+            grades: normalizeList(teacherSeed.grades),
+            classTeacherGrade: (teacherSeed.classTeacherGrade || '').trim(),
+            religion: (teacherSeed.religion || '').trim()
+        });
+
+        localStorage.setItem('et_teacher_credentials', JSON.stringify(nextCreds));
+    };
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -34,11 +187,6 @@ export const TeacherAuth = ({ settings, onLogin, onClose }) => {
 
         if (!username || !password) {
             setError('Please enter username and password');
-            return;
-        }
-
-        if (!settings?.googleScriptUrl) {
-            setError('Google Sheet not configured. Please configure in Settings.');
             return;
         }
 
@@ -61,6 +209,8 @@ export const TeacherAuth = ({ settings, onLogin, onClose }) => {
                     religion: result.religion || '',
                     isTeacher: true
                 };
+
+                await upsertTeacherProfile(teacherData);
 
                 localStorage.setItem('et_teacher_session', JSON.stringify(teacherData));
                 
@@ -98,37 +248,68 @@ export const TeacherAuth = ({ settings, onLogin, onClose }) => {
             return;
         }
 
-        if (!settings?.googleScriptUrl) {
-            setError('Google Sheet not configured. Please configure in Settings.');
-            return;
-        }
-
         setLoading(true);
 
         try {
-            const result = await googleSheetSync.registerTeacher(
+            const teacherSeed = {
                 username,
                 password,
-                '',
-                name || username,
+                name: name || username,
                 role,
                 subjects,
                 grades,
                 classTeacherGrade,
                 religion
-            );
+            };
 
-            if (result.success) {
-                setSuccess('Account created! You can now login.');
-                setMode('login');
-                setPassword('');
-                setConfirmPassword('');
-            } else {
-                setError(result.error || 'Registration failed');
+            let authResult = { success: false, error: 'Google Sheet not configured' };
+            if (settings?.googleScriptUrl) {
+                authResult = await googleSheetSync.registerTeacher(
+                    username,
+                    password,
+                    '',
+                    name || username,
+                    role,
+                    subjects,
+                    grades,
+                    classTeacherGrade,
+                    religion
+                );
             }
+
+            saveTeacherCredentials(teacherSeed);
+            const { syncResult } = await upsertTeacherProfile(teacherSeed, { syncToGoogle: !!settings?.googleScriptUrl });
+
+            const registrySaved = !syncResult || syncResult.success;
+            if (authResult.success && registrySaved) {
+                setSuccess('Account created and teacher profile added to the Teachers table. You can now login.');
+            } else if (registrySaved) {
+                setSuccess('Account saved locally and teacher profile added to the Teachers table. You can now login.');
+            } else {
+                setSuccess('Account created locally. The teacher profile was saved here but Google sync needs retrying from the Teachers table.');
+            }
+
+            setMode('login');
+            setPassword('');
+            setConfirmPassword('');
         } catch (err) {
-            setError('Registration failed. Please try again.');
-            console.error('Register error:', err);
+            const teacherSeed = {
+                username,
+                password,
+                name: name || username,
+                role,
+                subjects,
+                grades,
+                classTeacherGrade,
+                religion
+            };
+
+            saveTeacherCredentials(teacherSeed);
+            await upsertTeacherProfile(teacherSeed);
+            setSuccess('Account saved locally and teacher profile added to the Teachers table. You can now login.');
+            setMode('login');
+            setPassword('');
+            setConfirmPassword('');
         }
 
         setLoading(false);
@@ -283,26 +464,72 @@ export const TeacherAuth = ({ settings, onLogin, onClose }) => {
 
                             ${(role === 'teacher' || role === 'class_teacher') && html`
                                 <div>
-                                    <label class="block text-sm font-bold text-slate-600 mb-1">Subjects Taught</label>
-                                    <input
-                                        type="text"
-                                        value=${subjects}
-                                        onInput=${e => setSubjects(e.target.value)}
-                                        placeholder="E.g., Math, English (comma separated)"
-                                        class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
+                                    <label class="block text-sm font-bold text-slate-600 mb-1">Grades/Classes Taught (Select all that apply)</label>
+                                    <div class="border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto bg-slate-50">
+                                        ${allGrades.map(grd => html`
+                                            <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-slate-100 rounded px-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked=${grades.split(',').map(g => g.trim()).includes(grd)}
+                                                    onChange=${e => {
+                                                        const current = grades.split(',').map(g => g.trim()).filter(g => g);
+                                                        if (e.target.checked) {
+                                                            current.push(grd);
+                                                        } else {
+                                                            const idx = current.indexOf(grd);
+                                                            if (idx > -1) current.splice(idx, 1);
+                                                        }
+                                                        setGrades(current.join(', '));
+                                                    }}
+                                                    class="rounded text-blue-600"
+                                                />
+                                                <span class="text-sm">${grd}</span>
+                                            </label>
+                                        `)}
+                                    </div>
                                 </div>
-
-                                <div>
-                                    <label class="block text-sm font-bold text-slate-600 mb-1">Grades/Classes Taught</label>
-                                    <input
-                                        type="text"
-                                        value=${grades}
-                                        onInput=${e => setGrades(e.target.value)}
-                                        placeholder="E.g., GRADE 1, GRADE 2 (comma separated)"
-                                        class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
+                                
+                                ${grades && html`
+                                    <div>
+                                        <label class="block text-sm font-bold text-slate-600 mb-1">
+                                            Subjects for Selected Grades (${availableSubjectList.length} available)
+                                        </label>
+                                        ${availableSubjectList.length > 0 ? html`
+                                            <div class="border border-slate-200 rounded-lg p-3 max-h-48 overflow-y-auto bg-slate-50">
+                                                ${availableSubjectList.map(subj => html`
+                                                    <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-slate-100 rounded px-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked=${subjects.split(',').map(s => s.trim()).includes(subj)}
+                                                            onChange=${e => {
+                                                                const current = subjects.split(',').map(s => s.trim()).filter(s => s);
+                                                                if (e.target.checked) {
+                                                                    current.push(subj);
+                                                                } else {
+                                                                    const idx = current.indexOf(subj);
+                                                                    if (idx > -1) current.splice(idx, 1);
+                                                                }
+                                                                setSubjects(current.join(', '));
+                                                            }}
+                                                            class="rounded text-blue-600"
+                                                        />
+                                                        <span class="text-sm">${subj}</span>
+                                                    </label>
+                                                `)}
+                                            </div>
+                                        ` : html`
+                                            <p class="text-sm text-orange-600 bg-orange-50 p-2 rounded">Select grades above to see relevant subjects</p>
+                                        `}
+                                        <p class="text-xs text-slate-400 mt-1">Or type additional custom subjects</p>
+                                        <input
+                                            type="text"
+                                            value=${subjects}
+                                            onInput=${e => setSubjects(e.target.value)}
+                                            placeholder="Additional subjects (comma separated)"
+                                            class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1"
+                                        />
+                                    </div>
+                                `}
                             `}
 
                             ${role === 'class_teacher' && html`

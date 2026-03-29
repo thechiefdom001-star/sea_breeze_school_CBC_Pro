@@ -1,5 +1,5 @@
 import { h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import htm from 'htm';
 import { Storage } from '../lib/storage.js';
 import { googleSheetSync } from '../lib/googleSheetSync.js';
@@ -7,34 +7,184 @@ import { ActivityLog } from './ActivityLog.js';
 
 const html = htm.bind(h);
 
-export const Dashboard = ({ data, googleSyncStatus, isAdmin, teacherSession }) => {
+const parsePresenceDevice = (device) => {
+    const rawDevice = String(device || '').trim();
+    if (!rawDevice.includes('@') || !rawDevice.includes('#')) return null;
+
+    const [rolePart, rest] = rawDevice.split('@');
+    const hashIndex = rest.lastIndexOf('#');
+    if (hashIndex === -1) return null;
+
+    const username = rest.slice(0, hashIndex).trim();
+    const sessionId = rest.slice(hashIndex + 1).trim();
+    const role = rolePart.trim().toLowerCase();
+
+    if (!role || !username || !sessionId) return null;
+
+    return {
+        role,
+        username,
+        sessionId,
+        canonicalDevice: `${role}@${username}#${sessionId}`
+    };
+};
+
+const getCurrentPresenceDevice = (isAdmin, teacherSession) => {
+    const sessionId = (localStorage.getItem('et_session_id') || '').trim();
+    if (!sessionId) return null;
+
+    if (teacherSession && !isAdmin) {
+        const teacherUsername = (teacherSession.username || teacherSession.name || '').trim().toLowerCase();
+        return teacherUsername ? `teacher@${teacherUsername}#${sessionId}` : null;
+    }
+
+    if (isAdmin) {
+        const adminUsername = (localStorage.getItem('et_login_username') || '').trim().toLowerCase();
+        return adminUsername ? `admin@${adminUsername}#${sessionId}` : null;
+    }
+
+    return null;
+};
+
+const dedupeActiveUsers = (users = []) => {
+    const bySession = new Map();
+
+    users.forEach(user => {
+        const parsed = parsePresenceDevice(user.device);
+        if (!parsed) return;
+
+        const key = `${parsed.role}#${parsed.sessionId}`;
+        const candidateTime = Number(user.lastActivity || user.timestamp || 0);
+        const existing = bySession.get(key);
+        const existingParsed = existing ? parsePresenceDevice(existing.device) : null;
+        const existingTime = Number(existing?.lastActivity || existing?.timestamp || 0);
+
+        const shouldReplace = (
+            !existing ||
+            candidateTime > existingTime ||
+            (candidateTime === existingTime && parsed.username.length > (existingParsed?.username?.length || 0))
+        );
+
+        if (shouldReplace) {
+            bySession.set(key, {
+                ...user,
+                device: parsed.canonicalDevice
+            });
+        }
+    });
+
+    return Array.from(bySession.values()).sort(
+        (a, b) => Number(b.lastActivity || b.timestamp || 0) - Number(a.lastActivity || a.timestamp || 0)
+    );
+};
+
+export const Dashboard = ({ data, setData, googleSyncStatus, isAdmin, teacherSession }) => {
+    const [activeUsers, setActiveUsers] = useState([]);
+    const [lastActivity, setLastActivity] = useState(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const refreshRef = useRef(false); // Prevent concurrent refreshes
+    
     const students = data?.students || [];
     const payments = data?.payments || [];
     const assessments = data?.assessments || [];
     const settings = data?.settings || { currency: 'KES.', grades: [], feeStructures: [] };
-    
-    const [activeUsers, setActiveUsers] = useState([]);
-    const [lastActivity, setLastActivity] = useState(null);
 
-    // Check for active users periodically
+    const applyGoogleRefresh = (result) => {
+        if (!result?.success || typeof setData !== 'function') return;
+
+        setData(prev => Storage.replaceWithGoogleData(prev, {
+            students: result.students ?? null,
+            assessments: result.assessments ?? null,
+            attendance: result.attendance ?? null,
+            payments: result.payments ?? null,
+            teachers: result.teachers ?? null,
+            staff: result.staff ?? null
+        }));
+    };
+    
+    // Fetch fresh data from Google Sheet periodically
+    const refreshFromGoogle = async () => {
+        if (!settings.googleScriptUrl || refreshRef.current) return;
+        
+        refreshRef.current = true;
+        setIsRefreshing(true);
+        
+        try {
+            googleSheetSync.setSettings(settings);
+            const result = await googleSheetSync.fetchAll();
+            
+            if (result.success) {
+                applyGoogleRefresh(result);
+                console.log('📊 Dashboard refreshed from Google:', result.students?.length, 'students');
+            }
+        } catch (error) {
+            console.warn('Dashboard refresh error:', error);
+        } finally {
+            setIsRefreshing(false);
+            setTimeout(() => { refreshRef.current = false; }, 1000);
+        }
+    };
+
+    // Manual refresh for active users - ALWAYS fetch fresh from Google
+    const refreshActiveUsers = async () => {
+        if (!settings.googleScriptUrl) return;
+        
+        try {
+            googleSheetSync.setSettings(settings);
+            
+            const currentDeviceId = getCurrentPresenceDevice(isAdmin, teacherSession);
+            if (!currentDeviceId) return;
+            
+            console.log('👥 REFRESH: Registering:', currentDeviceId);
+            
+            // Register ourselves first
+            await googleSheetSync.setActiveUser(currentDeviceId);
+            
+            // Wait a moment then fetch ALL users from Google
+            await new Promise(r => setTimeout(r, 800));
+            
+            const result = await googleSheetSync.getActiveUsersDirect();
+            console.log('👥 REFRESH: Got result:', JSON.stringify(result));
+            
+            if (result.success && result.activeUsers) {
+                console.log('👥 REFRESH: Setting users:', result.activeUsers.map(u => u.device));
+                setActiveUsers(dedupeActiveUsers(result.activeUsers));
+            } else {
+                console.log('👥 REFRESH: No users or error:', result);
+            }
+        } catch (error) {
+            console.error('👥 REFRESH: Error:', error);
+        }
+    };
+    
+    // Check for active users - runs on mount and periodically
     useEffect(() => {
         if (!settings.googleScriptUrl) return;
         
         const checkActiveUsers = async () => {
             try {
                 googleSheetSync.setSettings(settings);
-                const result = await googleSheetSync.getActiveUsers();
+                
+                const currentDeviceId = getCurrentPresenceDevice(isAdmin, teacherSession);
+                
+                if (currentDeviceId) {
+                    await googleSheetSync.setActiveUser(currentDeviceId);
+                }
+                
+                // Get all active users DIRECTLY from Google (bypass any caching)
+                const result = await googleSheetSync.getActiveUsersDirect();
+                console.log('👥 Raw active users:', result);
                 
                 if (result.success) {
-                    // result.users contains the array of active user objects
-                    setActiveUsers(result.users || []);
-                    if (result.users && result.users.length > 0) {
-                        const mostRecent = result.users.reduce((prev, curr) => 
-                            (parseInt(curr.lastActivity) > parseInt(prev.lastActivity)) ? curr : prev
+                    const users = dedupeActiveUsers(result.activeUsers || []);
+                    console.log('👥 Setting users:', users.length, users.map(u => u.device));
+                    setActiveUsers(users);
+                    
+                    if (users.length > 0) {
+                        const mostRecent = users.reduce((prev, curr) => 
+                            (parseInt(curr.timestamp || 0) > parseInt(prev.timestamp || 0)) ? curr : prev
                         );
-                        setLastActivity(new Date(parseInt(mostRecent.lastActivity)));
-                } else if (result.lastActivity) {
-                        setLastActivity(new Date(parseInt(result.lastActivity)));
+                        setLastActivity(new Date(parseInt(mostRecent.timestamp || 0)));
                     }
                 }
             } catch (error) {
@@ -42,21 +192,54 @@ export const Dashboard = ({ data, googleSyncStatus, isAdmin, teacherSession }) =
             }
         };
         
-        // Check immediately and then every 30 seconds
+        // Run immediately and then every 5 seconds (very frequent)
         checkActiveUsers();
-        const interval = setInterval(checkActiveUsers, 30000);
+        const interval = setInterval(checkActiveUsers, 5000);
         
         return () => clearInterval(interval);
+    }, [settings.googleScriptUrl, isAdmin, teacherSession]);
+    
+    // Auto-refresh data from Google every 30 seconds
+    useEffect(() => {
+        if (!settings.googleScriptUrl) return;
+        
+        const doRefresh = async () => {
+            if (refreshRef.current) return;
+            refreshRef.current = true;
+            setIsRefreshing(true);
+            
+            try {
+                googleSheetSync.setSettings(settings);
+                const result = await googleSheetSync.fetchAll();
+                
+                if (result.success) {
+                    applyGoogleRefresh(result);
+                }
+            } catch (error) {
+                console.warn('Dashboard refresh error:', error);
+            } finally {
+                setIsRefreshing(false);
+                setTimeout(() => { refreshRef.current = false; }, 1000);
+            }
+        };
+        
+        // Refresh immediately on mount
+        doRefresh();
+        
+        // Then refresh every 30 seconds
+        const refreshInterval = setInterval(doRefresh, 30000);
+        
+        return () => clearInterval(refreshInterval);
     }, [settings.googleScriptUrl]);
 
     const totalStudents = students.length;
     const totalTeachers = (data?.teachers || []).length;
     const totalStaff = (data?.staff || []).length;
-    const totalFeesCollected = (data?.payments || [])
+    const totalFeesCollected = payments
         .filter(p => !p.voided)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const expectedFees = students.reduce((sum, s) => {
-        const fin = Storage.getStudentFinancials(s, data.payments, settings);
+        const fin = Storage.getStudentFinancials(s, payments, settings);
         return sum + fin.totalDue;
     }, 0);
     const totalArrears = expectedFees - totalFeesCollected;
@@ -64,7 +247,7 @@ export const Dashboard = ({ data, googleSyncStatus, isAdmin, teacherSession }) =
 
     const feesPerGrade = (settings.grades || []).map(grade => {
         const gradeStudentIds = students.filter(s => s.grade === grade).map(s => s.id);
-        const total = (data?.payments || [])
+        const total = payments
             .filter(p => gradeStudentIds.includes(p.studentId) && !p.voided)
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         return { grade, total };
@@ -104,23 +287,45 @@ export const Dashboard = ({ data, googleSyncStatus, isAdmin, teacherSession }) =
             `}
             ${settings.googleScriptUrl && html`
                 <div class="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-3 rounded-xl shadow-lg shadow-green-200">
-                    <div class="flex items-center gap-3 mb-3">
-                        <span class="text-2xl">📊</span>
-                        <div>
-                            <p class="font-bold">Google Sheet Connected</p>
-                            <p class="text-xs text-green-100">Real-time data sync enabled</p>
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">📊</span>
+                            <div>
+                                <p class="font-bold">Google Sheet Connected</p>
+                                <p class="text-xs text-green-100">Real-time data sync enabled</p>
+                            </div>
                         </div>
+                        <button 
+                            onClick=${refreshFromGoogle}
+                            disabled=${isRefreshing}
+                            class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-all"
+                        >
+                            <span class=${isRefreshing ? 'animate-spin' : ''}>${isRefreshing ? '⏳' : '🔄'}</span>
+                            ${isRefreshing ? 'Syncing...' : 'Sync Now'}
+                        </button>
                     </div>
                     
                     <!-- Active Users Display -->
+                    <div class="flex items-center justify-between mt-4 pt-4 border-t border-white/20">
+                        <p class="text-xs font-bold uppercase text-green-100">👥 Online Users (${activeUsers.length})</p>
+                        <button 
+                            onClick=${refreshActiveUsers}
+                            class="bg-yellow-400 hover:bg-yellow-300 px-4 py-2 rounded-xl font-bold text-sm text-slate-800 flex items-center gap-2"
+                            title="Click to refresh active users list"
+                        >
+                            <span>🔄</span>
+                            Refresh Users
+                        </button>
+                    </div>
                     ${activeUsers.length > 0 ? html`
-                        <div class="mt-4 pt-4 border-t border-white/20">
-                            <p class="text-xs font-bold uppercase text-green-100 mb-3">👥 Online Users (${activeUsers.length})</p>
+                        <div class="mt-2 pt-0 border-t border-white/20">
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 ${activeUsers.map(user => {
-                                    const lastTime = new Date(user.lastActivity);
-                                    const role = user.device.includes('admin@') ? '👨‍💼 Admin' : '👨‍🏫 Teacher';
-                                    const username = user.device.split('@')[1]?.split('-')[0] || 'Unknown';
+                                    const lastTime = user.lastActivity ? new Date(user.lastActivity) : new Date();
+                                    const role = user.device.includes('admin@') ? '👨‍💼 Admin' : (user.device.includes('teacher@') ? '👨‍🏫 Teacher' : '👤 User');
+                                    // Handle new format: role@username#session_id
+                                    const usernamePart = user.device.split('@')[1] || user.device;
+                                    const username = usernamePart.split('#')[0] || 'Unknown';
                                     return html`
                                         <div class="bg-white/10 backdrop-blur rounded-lg p-3 flex items-center gap-3">
                                             <div class="flex-1 min-w-0">
@@ -138,7 +343,17 @@ export const Dashboard = ({ data, googleSyncStatus, isAdmin, teacherSession }) =
                         </div>
                     ` : html`
                         <div class="mt-4 pt-4 border-t border-white/20">
-                            <p class="text-xs text-green-100">No users currently active. Last activity: ${lastActivity ? lastActivity.toLocaleTimeString() : 'N/A'}</p>
+                            <div class="bg-white/10 rounded-lg p-3 flex items-center gap-3">
+                                <div class="flex-1">
+                                    <p class="text-sm font-bold">${isAdmin ? '👨‍💼 Admin' : (teacherSession ? '👨‍🏫 Teacher' : '👤 User')}</p>
+                                    <p class="text-xs text-green-100">${isAdmin ? (localStorage.getItem('et_login_username') || 'Admin') : (teacherSession?.name || teacherSession?.username || 'You')}</p>
+                                    <p class="text-[10px] text-green-200 mt-1">You are online - click around to stay active!</p>
+                                </div>
+                                <div class="flex-shrink-0">
+                                    <span class="inline-flex h-3 w-3 rounded-full bg-green-300 animate-pulse"></span>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-green-200 mt-2">Note: Other users will appear when they also use the system. Click "Refresh Users" to update the list.</p>
                         </div>
                     `}
                 </div>
